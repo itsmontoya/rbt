@@ -1,12 +1,20 @@
 package redBlack
 
 import (
-	//"fmt"
+	//	"fmt"
 
 	"math/rand"
 	"sort"
 	"strconv"
 	"testing"
+
+	"github.com/itsmontoya/harmonic"
+)
+
+var (
+	testSortedList  = getStrSlice(getSorted(1000))
+	testReverseList = getStrSlice(getReverse(1000))
+	testRandomList  = getStrSlice(getRand(1000))
 )
 
 func TestSortedPut(t *testing.T) {
@@ -19,6 +27,51 @@ func TestReversePut(t *testing.T) {
 
 func TestRandomPut(t *testing.T) {
 	testPut(t, getRand(10000))
+}
+
+func BenchmarkSortedPut(b *testing.B) {
+	benchPut(b, testSortedList)
+	b.ReportAllocs()
+}
+
+func BenchmarkReversePut(b *testing.B) {
+	benchPut(b, testReverseList)
+	b.ReportAllocs()
+}
+
+func BenchmarkRandomPut(b *testing.B) {
+	benchPut(b, testRandomList)
+	b.ReportAllocs()
+}
+
+func BenchmarkMapSortedPut(b *testing.B) {
+	benchMapPut(b, testSortedList)
+	b.ReportAllocs()
+}
+
+func BenchmarkMapReversePut(b *testing.B) {
+	benchMapPut(b, testReverseList)
+	b.ReportAllocs()
+}
+
+func BenchmarkMapRandomPut(b *testing.B) {
+	benchMapPut(b, testRandomList)
+	b.ReportAllocs()
+}
+
+func BenchmarkHarmonicSortedPut(b *testing.B) {
+	benchHarmonicPut(b, testSortedList)
+	b.ReportAllocs()
+}
+
+func BenchmarkHarmonicReversePut(b *testing.B) {
+	benchHarmonicPut(b, testReverseList)
+	b.ReportAllocs()
+}
+
+func BenchmarkHarmonicRandomPut(b *testing.B) {
+	benchHarmonicPut(b, testRandomList)
+	b.ReportAllocs()
 }
 
 func testPut(t *testing.T, s []int) {
@@ -51,6 +104,49 @@ func testPut(t *testing.T, s []int) {
 			t.Fatalf("invalid value:\nKey: %s\nExpected: %v\nReturned: %v\n", key, mv, val)
 		}
 	}
+}
+
+func benchPut(b *testing.B, s []string) {
+	b.ResetTimer()
+	tr := New()
+
+	for i := 0; i < b.N; i++ {
+		for i, key := range s {
+			tr.Put(key, i)
+		}
+	}
+}
+
+func benchMapPut(b *testing.B, s []string) {
+	b.ResetTimer()
+	m := make(map[string]interface{})
+
+	for i := 0; i < b.N; i++ {
+		for i, key := range s {
+			m[key] = i
+		}
+	}
+}
+
+func benchHarmonicPut(b *testing.B, s []string) {
+	b.ResetTimer()
+	h := harmonic.New(0)
+
+	for i := 0; i < b.N; i++ {
+		for i, key := range s {
+			h.Put(key, i)
+		}
+	}
+}
+
+func getStrSlice(in []int) (out []string) {
+	out = make([]string, len(in))
+
+	for i, v := range in {
+		out[i] = strconv.Itoa(v)
+	}
+
+	return
 }
 
 func getSorted(n int) (s []int) {
