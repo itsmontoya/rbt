@@ -1,44 +1,74 @@
 package redBlack
 
 import (
-	//	"fmt"
-	"fmt"
+	//"fmt"
+
+	"math/rand"
+	"sort"
 	"strconv"
 	"testing"
 )
 
-func TestBasic(t *testing.T) {
-	tr := New()
+func TestSortedPut(t *testing.T) {
+	testPut(t, getSorted(10000))
+}
 
-	for i := 10; i > -1; i-- {
-		tr.Put(strconv.Itoa(i), i)
-		tr.Print()
-		fmt.Println("")
+func TestReversePut(t *testing.T) {
+	testPut(t, getReverse(10000))
+}
+
+func TestRandomPut(t *testing.T) {
+	testPut(t, getRand(10000))
+}
+
+func testPut(t *testing.T, s []int) {
+	tr := New()
+	cnt := len(s)
+	tm := make(map[string]interface{}, cnt)
+
+	for _, v := range s {
+		key := strconv.Itoa(v)
+		tr.Put(key, v)
+		tm[key] = v
 	}
 
-	tr.Print()
-	//	for i := 0; i < 10000; i++ {
-	//		tr.Put(strconv.Itoa(i), i)
-	//	}
-
+	var fecnt int
 	tr.ForEach(func(key string, val interface{}) {
-		fmt.Println(key, val)
+		if tm[key] != val {
+			t.Fatalf("invalid value:\nKey: %s\nExpected: %v\nReturned: %v\n", key, tm[key], val)
+		}
+
+		fecnt++
 	})
 
-	fmt.Println("Manual test")
-	fmt.Println("0", tr.Get("0"))
-	fmt.Println("1", tr.Get("1"))
-	fmt.Println("2", tr.Get("2"))
-	fmt.Println("3", tr.Get("3"))
-	fmt.Println("4", tr.Get("4"))
-	fmt.Println("5", tr.Get("5"))
-	fmt.Println("5", tr.Get("6"))
-	fmt.Println("5", tr.Get("7"))
-	fmt.Println("5", tr.Get("8"))
-	fmt.Println("5", tr.Get("9"))
-	fmt.Println("5", tr.Get("10"))
+	if fecnt != cnt {
+		t.Fatalf("invalid ForEach iterations:\nExpected: %v\nActual: %v\n", cnt, fecnt)
+	}
+
+	for key, mv := range tm {
+		val := tr.Get(key)
+		if val != mv {
+			t.Fatalf("invalid value:\nKey: %s\nExpected: %v\nReturned: %v\n", key, mv, val)
+		}
+	}
+}
+
+func getSorted(n int) (s []int) {
+	s = make([]int, n)
+
+	for i := 0; i < n; i++ {
+		s[i] = i
+	}
+
 	return
-	//	fmt.Println("6", tr.Get("6"))
-	//	fmt.Println("Child 0", tr.root.children[0])
-	//	fmt.Println("Child 1", tr.root.children[1])
+}
+
+func getReverse(n int) (s []int) {
+	s = getSorted(n)
+	sort.Reverse(sort.IntSlice(s))
+	return
+}
+
+func getRand(n int) (s []int) {
+	return rand.Perm(n)
 }

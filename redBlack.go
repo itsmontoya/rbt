@@ -75,7 +75,6 @@ func (t *Tree) Put(key string, val interface{}) {
 	if t.root == nil {
 		n = newNode(key)
 		t.root = n
-		fmt.Println("Node is root")
 	} else {
 		n = t.root.getNode(key, true)
 	}
@@ -195,9 +194,14 @@ func (n *node) balance() {
 		}
 
 	case n.getUncle().isRed():
-		n.parent.swapColor()
-		n.getUncle().swapColor()
-		n.parent.parent.swapColor()
+		//n.parent.swapColor()
+		//n.getUncle().swapColor()
+		//n.parent.parent.swapColor()
+
+		// Testing this..
+		n.parent.c = colorBlack
+		n.getUncle().c = colorBlack
+		n.parent.parent.c = colorRed
 
 	case n.parent.isRed():
 		if n.isTriangle() {
@@ -219,31 +223,26 @@ func (n *node) swapColor() {
 
 func (n *node) rotateParent() {
 	parent := n.parent
-	fmt.Println("Rotating parent", n.key, parent.key, parent.parent.key)
 	switch n.ct {
 	case childLeft:
-		fmt.Println("Child left")
-		return
 		n.ct = parent.ct
-
-		parent.children[0] = nil
-		parent.updateParent(n)
-		parent.ct = childLeft
-		parent.parent = n
-
+		n.parent = parent.parent
 		n.children[1] = parent
 
-	case childRight:
-		fmt.Println("Child right!")
-
-		n.ct = parent.ct
-
-		parent.children[1] = nil
-		parent.updateParent(n)
 		parent.ct = childRight
+		parent.children[0] = nil
+		parent.updateParent(n)
 		parent.parent = n
 
+	case childRight:
+		n.ct = parent.ct
+		n.parent = parent.parent
 		n.children[0] = parent
+
+		parent.ct = childLeft
+		parent.children[1] = nil
+		parent.updateParent(n)
+		parent.parent = n
 
 	default:
 		panic("invalid child type for parent rotation")
@@ -252,13 +251,7 @@ func (n *node) rotateParent() {
 
 func (n *node) rotateGrandparent() {
 	grandparent := n.parent.parent
-	fmt.Println("Rotating grandparent", n.key, n.parent.key, grandparent.key)
 	n.parent.parent = grandparent.parent
-
-	// Swap colors
-	pc := n.parent.c
-	n.parent.c = grandparent.c
-	grandparent.c = pc
 
 	switch n.parent.ct {
 	case childLeft:
@@ -280,6 +273,9 @@ func (n *node) rotateGrandparent() {
 	default:
 		panic("invalid child type for grandparent rotation")
 	}
+
+	grandparent.swapColor()
+	n.parent.swapColor()
 }
 
 func (n *node) updateParent(nc *node) {
