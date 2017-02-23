@@ -131,8 +131,14 @@ func (n *node) leftRotate() {
 	parent := n.parent
 
 	// Swap  children
-	parent.children[1] = n.children[0]
+	swapChild := n.children[0]
+	parent.children[1] = swapChild
 	n.children[0] = parent
+
+	if swapChild != nil {
+		swapChild.parent = parent
+		swapChild.ct = childRight
+	}
 
 	// Update grandparent so that n is it's new child
 	parent.updateParent(n)
@@ -150,8 +156,14 @@ func (n *node) rightRotate() {
 	parent := n.parent
 
 	// Swap  children
-	parent.children[0] = n.children[1]
+	swapChild := n.children[1]
+	parent.children[0] = swapChild
 	n.children[1] = parent
+
+	if swapChild != nil {
+		swapChild.parent = parent
+		swapChild.ct = childLeft
+	}
 
 	// Update grandparent so that n is it's new child
 	parent.updateParent(n)
@@ -200,12 +212,8 @@ func (n *node) rotateGrandparent() {
 func (n *node) updateParent(nc *node) {
 	switch n.ct {
 	case childLeft:
-		fmt.Println("Updating parent", n.key, nc.key, n.parent.key)
-
 		n.parent.children[0] = nc
 	case childRight:
-		fmt.Println("Updating parent", n.key, nc.key, n.parent.key)
-
 		n.parent.children[1] = nc
 	case childRoot:
 		// No action is taken, tree will handle this at the end of put

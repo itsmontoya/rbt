@@ -29,7 +29,8 @@ func TestReversePut(t *testing.T) {
 }
 
 func TestRandomPut(t *testing.T) {
-	testPut(t, getRand(26))
+	//testPut(t, getRand(26))
+	testPut(t, []int{0, 9, 11, 25, 22, 14, 23, 20, 17, 18})
 }
 
 func BenchmarkSortedPut(b *testing.B) {
@@ -118,7 +119,7 @@ func testPut(t *testing.T, s []int) {
 		tr.Put(key, v)
 		tm[key] = v
 
-		pr.Print()
+		//	pr.Print()
 		fmt.Println("\n==========\n")
 	}
 
@@ -141,6 +142,8 @@ func testPut(t *testing.T, s []int) {
 	if fecnt != cnt {
 		t.Fatalf("invalid ForEach iterations:\nExpected: %v\nActual: %v\n", cnt, fecnt)
 	}
+
+	pr.Print()
 }
 
 func benchPut(b *testing.B, s []string) {
