@@ -1,20 +1,23 @@
 package redBlack
 
 import (
-	//	"fmt"
-
+	"fmt"
 	"math/rand"
 	"sort"
 	"strconv"
 	"testing"
+	"time"
 
+	"github.com/OneOfOne/simpleSkip"
 	"github.com/itsmontoya/harmonic"
 )
 
 var (
-	testSortedList  = getStrSlice(getSorted(1000))
-	testReverseList = getStrSlice(getReverse(1000))
-	testRandomList  = getStrSlice(getRand(1000))
+	testSortedList  = getStrSlice(getSorted(10000))
+	testReverseList = getStrSlice(getReverse(10000))
+	testRandomList  = getStrSlice(getRand(10000))
+
+	testVal interface{}
 )
 
 func TestSortedPut(t *testing.T) {
@@ -26,7 +29,7 @@ func TestReversePut(t *testing.T) {
 }
 
 func TestRandomPut(t *testing.T) {
-	testPut(t, getRand(10000))
+	testPut(t, getRand(26))
 }
 
 func BenchmarkSortedPut(b *testing.B) {
@@ -49,6 +52,11 @@ func BenchmarkMapSortedPut(b *testing.B) {
 	b.ReportAllocs()
 }
 
+func BenchmarkMapSortedGetPut(b *testing.B) {
+	benchMapGetPut(b, testSortedList)
+	b.ReportAllocs()
+}
+
 func BenchmarkMapReversePut(b *testing.B) {
 	benchMapPut(b, testReverseList)
 	b.ReportAllocs()
@@ -64,6 +72,11 @@ func BenchmarkHarmonicSortedPut(b *testing.B) {
 	b.ReportAllocs()
 }
 
+func BenchmarkHarmonicSortedGetPut(b *testing.B) {
+	benchHarmonicGetPut(b, testSortedList)
+	b.ReportAllocs()
+}
+
 func BenchmarkHarmonicReversePut(b *testing.B) {
 	benchHarmonicPut(b, testReverseList)
 	b.ReportAllocs()
@@ -74,15 +87,46 @@ func BenchmarkHarmonicRandomPut(b *testing.B) {
 	b.ReportAllocs()
 }
 
+func BenchmarkSkiplistSortedPut(b *testing.B) {
+	benchSkiplistPut(b, testSortedList)
+	b.ReportAllocs()
+}
+
+func BenchmarkSkiplistSortedGetPut(b *testing.B) {
+	benchSkiplistGetPut(b, testSortedList)
+	b.ReportAllocs()
+}
+
+func BenchmarkSkiplistReversePut(b *testing.B) {
+	benchSkiplistPut(b, testReverseList)
+	b.ReportAllocs()
+}
+
+func BenchmarkSkiplistRandomPut(b *testing.B) {
+	benchSkiplistPut(b, testRandomList)
+	b.ReportAllocs()
+}
+
 func testPut(t *testing.T, s []int) {
 	tr := New()
 	cnt := len(s)
 	tm := make(map[string]interface{}, cnt)
+	pr := newPrinter(tr)
 
 	for _, v := range s {
-		key := strconv.Itoa(v)
+		key := fmt.Sprintf("%012d", v)
 		tr.Put(key, v)
 		tm[key] = v
+
+		pr.Print()
+		fmt.Println("\n==========\n")
+	}
+
+	for key, mv := range tm {
+		val := tr.Get(key)
+		if val != mv {
+			t.Fatalf("invalid value:\nKey: %s\nExpected: %v\nReturned: %v\n", key, mv, val)
+		}
 	}
 
 	var fecnt int
@@ -96,13 +140,6 @@ func testPut(t *testing.T, s []int) {
 
 	if fecnt != cnt {
 		t.Fatalf("invalid ForEach iterations:\nExpected: %v\nActual: %v\n", cnt, fecnt)
-	}
-
-	for key, mv := range tm {
-		val := tr.Get(key)
-		if val != mv {
-			t.Fatalf("invalid value:\nKey: %s\nExpected: %v\nReturned: %v\n", key, mv, val)
-		}
 	}
 }
 
@@ -128,6 +165,18 @@ func benchMapPut(b *testing.B, s []string) {
 	}
 }
 
+func benchMapGetPut(b *testing.B, s []string) {
+	b.ResetTimer()
+	m := make(map[string]interface{})
+
+	for i := 0; i < b.N; i++ {
+		for i, key := range s {
+			m[key] = i
+			testVal = m[key]
+		}
+	}
+}
+
 func benchHarmonicPut(b *testing.B, s []string) {
 	b.ResetTimer()
 	h := harmonic.New(0)
@@ -135,6 +184,41 @@ func benchHarmonicPut(b *testing.B, s []string) {
 	for i := 0; i < b.N; i++ {
 		for i, key := range s {
 			h.Put(key, i)
+		}
+	}
+}
+
+func benchHarmonicGetPut(b *testing.B, s []string) {
+	b.ResetTimer()
+	h := harmonic.New(0)
+
+	for i := 0; i < b.N; i++ {
+		for i, key := range s {
+			h.Put(key, i)
+			testVal, _ = h.Get(key)
+		}
+	}
+}
+
+func benchSkiplistPut(b *testing.B, s []string) {
+	b.ResetTimer()
+	sl := simpleSkip.New(32, time.Now().Unix())
+
+	for i := 0; i < b.N; i++ {
+		for i, key := range s {
+			sl.Set(key, i)
+		}
+	}
+}
+
+func benchSkiplistGetPut(b *testing.B, s []string) {
+	b.ResetTimer()
+	sl := simpleSkip.New(16, time.Now().Unix())
+
+	for i := 0; i < b.N; i++ {
+		for i, key := range s {
+			sl.Set(key, i)
+			testVal = sl.Get(key)
 		}
 	}
 }
