@@ -1,9 +1,5 @@
 package redBlack
 
-import (
-	"fmt"
-)
-
 const (
 	colorBlack color = iota
 	colorRed
@@ -63,7 +59,6 @@ func (t *Tree) Put(key string, val interface{}) {
 
 	if t.root.ct != childRoot {
 		t.root = t.root.parent
-		fmt.Println("New root", t.root.key, t.root.ct)
 	}
 }
 

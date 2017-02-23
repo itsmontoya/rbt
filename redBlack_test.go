@@ -6,9 +6,8 @@ import (
 	"sort"
 	"strconv"
 	"testing"
-	"time"
 
-	"github.com/OneOfOne/simpleSkip"
+	"github.com/OneOfOne/skiplist"
 	"github.com/itsmontoya/harmonic"
 )
 
@@ -29,12 +28,21 @@ func TestReversePut(t *testing.T) {
 }
 
 func TestRandomPut(t *testing.T) {
-	//testPut(t, getRand(26))
-	testPut(t, []int{0, 9, 11, 25, 22, 14, 23, 20, 17, 18})
+	testPut(t, getRand(10000))
+}
+
+func BenchmarkGet(b *testing.B) {
+	benchGet(b, testSortedList)
+	b.ReportAllocs()
 }
 
 func BenchmarkSortedPut(b *testing.B) {
 	benchPut(b, testSortedList)
+	b.ReportAllocs()
+}
+
+func BenchmarkSortedGetPut(b *testing.B) {
+	benchGetPut(b, testSortedList)
 	b.ReportAllocs()
 }
 
@@ -88,6 +96,11 @@ func BenchmarkHarmonicRandomPut(b *testing.B) {
 	b.ReportAllocs()
 }
 
+func BenchmarkSkiplistGet(b *testing.B) {
+	benchSkiplistGet(b, testSortedList)
+	b.ReportAllocs()
+}
+
 func BenchmarkSkiplistSortedPut(b *testing.B) {
 	benchSkiplistPut(b, testSortedList)
 	b.ReportAllocs()
@@ -112,15 +125,11 @@ func testPut(t *testing.T, s []int) {
 	tr := New()
 	cnt := len(s)
 	tm := make(map[string]interface{}, cnt)
-	pr := newPrinter(tr)
 
 	for _, v := range s {
 		key := fmt.Sprintf("%012d", v)
 		tr.Put(key, v)
 		tm[key] = v
-
-		//	pr.Print()
-		fmt.Println("\n==========\n")
 	}
 
 	for key, mv := range tm {
@@ -142,8 +151,20 @@ func testPut(t *testing.T, s []int) {
 	if fecnt != cnt {
 		t.Fatalf("invalid ForEach iterations:\nExpected: %v\nActual: %v\n", cnt, fecnt)
 	}
+}
 
-	pr.Print()
+func benchGet(b *testing.B, s []string) {
+	tr := New()
+	for i, key := range s {
+		tr.Put(key, i)
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, key := range s {
+			testVal = tr.Get(key)
+		}
+	}
 }
 
 func benchPut(b *testing.B, s []string) {
@@ -153,6 +174,18 @@ func benchPut(b *testing.B, s []string) {
 	for i := 0; i < b.N; i++ {
 		for i, key := range s {
 			tr.Put(key, i)
+		}
+	}
+}
+
+func benchGetPut(b *testing.B, s []string) {
+	b.ResetTimer()
+	tr := New()
+
+	for i := 0; i < b.N; i++ {
+		for i, key := range s {
+			tr.Put(key, i)
+			testVal = tr.Get(key)
 		}
 	}
 }
@@ -203,10 +236,23 @@ func benchHarmonicGetPut(b *testing.B, s []string) {
 	}
 }
 
+func benchSkiplistGet(b *testing.B, s []string) {
+	sl := skiplist.New(32, skiplistCompare)
+	for i, key := range s {
+		sl.Set(key, i)
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, key := range s {
+			testVal = sl.Get(key)
+		}
+	}
+}
+
 func benchSkiplistPut(b *testing.B, s []string) {
 	b.ResetTimer()
-	sl := simpleSkip.New(32, time.Now().Unix())
-
+	sl := skiplist.New(32, skiplistCompare)
 	for i := 0; i < b.N; i++ {
 		for i, key := range s {
 			sl.Set(key, i)
@@ -216,7 +262,7 @@ func benchSkiplistPut(b *testing.B, s []string) {
 
 func benchSkiplistGetPut(b *testing.B, s []string) {
 	b.ResetTimer()
-	sl := simpleSkip.New(16, time.Now().Unix())
+	sl := skiplist.New(32, skiplistCompare)
 
 	for i := 0; i < b.N; i++ {
 		for i, key := range s {
@@ -254,4 +300,17 @@ func getReverse(n int) (s []int) {
 
 func getRand(n int) (s []int) {
 	return rand.Perm(n)
+}
+
+func skiplistCompare(a, b interface{}) int {
+	astr := a.(string)
+	bstr := b.(string)
+
+	if astr > bstr {
+		return 1
+	} else if astr < bstr {
+		return -1
+	} else {
+		return 0
+	}
 }
