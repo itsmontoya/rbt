@@ -318,7 +318,7 @@ func benchHarmonicForEach(b *testing.B, s []string) {
 }
 
 func benchSkiplistGet(b *testing.B, s []string) {
-	sl := skiplist.New(32, skiplistCompare)
+	sl := skiplist.New(32)
 	for i, key := range s {
 		sl.Set(key, i)
 	}
@@ -333,7 +333,7 @@ func benchSkiplistGet(b *testing.B, s []string) {
 
 func benchSkiplistPut(b *testing.B, s []string) {
 	b.ResetTimer()
-	sl := skiplist.New(32, skiplistCompare)
+	sl := skiplist.New(32)
 	for i := 0; i < b.N; i++ {
 		for i, key := range s {
 			sl.Set(key, i)
@@ -343,7 +343,7 @@ func benchSkiplistPut(b *testing.B, s []string) {
 
 func benchSkiplistGetPut(b *testing.B, s []string) {
 	b.ResetTimer()
-	sl := skiplist.New(32, skiplistCompare)
+	sl := skiplist.New(32)
 
 	for i := 0; i < b.N; i++ {
 		for i, key := range s {
@@ -354,14 +354,14 @@ func benchSkiplistGetPut(b *testing.B, s []string) {
 }
 
 func benchSkiplistForEach(b *testing.B, s []string) {
-	sl := skiplist.New(32, skiplistCompare)
+	sl := skiplist.New(32)
 	for i, key := range s {
 		sl.Set(key, i)
 	}
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		sl.ForEach(func(_, val interface{}) bool {
+		sl.ForEach(func(_ string, val interface{}) bool {
 			testVal = val
 			return false
 		})
@@ -396,17 +396,4 @@ func getReverse(n int) (s []int) {
 
 func getRand(n int) (s []int) {
 	return rand.Perm(n)
-}
-
-func skiplistCompare(a, b interface{}) int {
-	astr := a.(string)
-	bstr := b.(string)
-
-	if astr > bstr {
-		return 1
-	} else if astr < bstr {
-		return -1
-	} else {
-		return 0
-	}
 }
