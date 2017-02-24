@@ -36,13 +36,13 @@ func BenchmarkGet(b *testing.B) {
 	b.ReportAllocs()
 }
 
-func BenchmarkSortedPut(b *testing.B) {
-	benchPut(b, testSortedList)
+func BenchmarkSortedGetPut(b *testing.B) {
+	benchGetPut(b, testSortedList)
 	b.ReportAllocs()
 }
 
-func BenchmarkSortedGetPut(b *testing.B) {
-	benchGetPut(b, testSortedList)
+func BenchmarkSortedPut(b *testing.B) {
+	benchPut(b, testSortedList)
 	b.ReportAllocs()
 }
 
@@ -61,13 +61,18 @@ func BenchmarkForEach(b *testing.B) {
 	b.ReportAllocs()
 }
 
-func BenchmarkMapSortedPut(b *testing.B) {
-	benchMapPut(b, testSortedList)
+func BenchmarkMapGet(b *testing.B) {
+	benchMapGet(b, testSortedList)
 	b.ReportAllocs()
 }
 
 func BenchmarkMapSortedGetPut(b *testing.B) {
 	benchMapGetPut(b, testSortedList)
+	b.ReportAllocs()
+}
+
+func BenchmarkMapSortedPut(b *testing.B) {
+	benchMapPut(b, testSortedList)
 	b.ReportAllocs()
 }
 
@@ -86,13 +91,13 @@ func BenchmarkMapForEach(b *testing.B) {
 	b.ReportAllocs()
 }
 
-func BenchmarkHarmonicSortedPut(b *testing.B) {
-	benchHarmonicPut(b, testSortedList)
+func BenchmarkHarmonicSortedGetPut(b *testing.B) {
+	benchHarmonicGetPut(b, testSortedList)
 	b.ReportAllocs()
 }
 
-func BenchmarkHarmonicSortedGetPut(b *testing.B) {
-	benchHarmonicGetPut(b, testSortedList)
+func BenchmarkHarmonicSortedPut(b *testing.B) {
+	benchHarmonicPut(b, testSortedList)
 	b.ReportAllocs()
 }
 
@@ -106,18 +111,23 @@ func BenchmarkHarmonicRandomPut(b *testing.B) {
 	b.ReportAllocs()
 }
 
+func BenchmarkHarmonicForEach(b *testing.B) {
+	benchHarmonicForEach(b, testSortedList)
+	b.ReportAllocs()
+}
+
 func BenchmarkSkiplistGet(b *testing.B) {
 	benchSkiplistGet(b, testSortedList)
 	b.ReportAllocs()
 }
 
-func BenchmarkSkiplistSortedPut(b *testing.B) {
-	benchSkiplistPut(b, testSortedList)
+func BenchmarkSkiplistSortedGetPut(b *testing.B) {
+	benchSkiplistGetPut(b, testSortedList)
 	b.ReportAllocs()
 }
 
-func BenchmarkSkiplistSortedGetPut(b *testing.B) {
-	benchSkiplistGetPut(b, testSortedList)
+func BenchmarkSkiplistSortedPut(b *testing.B) {
+	benchSkiplistPut(b, testSortedList)
 	b.ReportAllocs()
 }
 
@@ -128,6 +138,11 @@ func BenchmarkSkiplistReversePut(b *testing.B) {
 
 func BenchmarkSkiplistRandomPut(b *testing.B) {
 	benchSkiplistPut(b, testRandomList)
+	b.ReportAllocs()
+}
+
+func BenchmarkSkiplistForEach(b *testing.B) {
+	benchSkiplistForEach(b, testSortedList)
 	b.ReportAllocs()
 }
 
@@ -214,6 +229,20 @@ func benchForEach(b *testing.B, s []string) {
 	}
 }
 
+func benchMapGet(b *testing.B, s []string) {
+	m := make(map[string]interface{})
+	for i, key := range s {
+		m[key] = i
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, key := range s {
+			testVal = m[key]
+		}
+	}
+}
+
 func benchMapPut(b *testing.B, s []string) {
 	b.ResetTimer()
 	m := make(map[string]interface{})
@@ -274,6 +303,20 @@ func benchHarmonicGetPut(b *testing.B, s []string) {
 	}
 }
 
+func benchHarmonicForEach(b *testing.B, s []string) {
+	h := harmonic.New(0)
+	for i, key := range s {
+		h.Put(key, i)
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		h.ForEach(func(_ string, val interface{}) {
+			testVal = val
+		})
+	}
+}
+
 func benchSkiplistGet(b *testing.B, s []string) {
 	sl := skiplist.New(32, skiplistCompare)
 	for i, key := range s {
@@ -307,6 +350,21 @@ func benchSkiplistGetPut(b *testing.B, s []string) {
 			sl.Set(key, i)
 			testVal = sl.Get(key)
 		}
+	}
+}
+
+func benchSkiplistForEach(b *testing.B, s []string) {
+	sl := skiplist.New(32, skiplistCompare)
+	for i, key := range s {
+		sl.Set(key, i)
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		sl.ForEach(func(_, val interface{}) bool {
+			testVal = val
+			return false
+		})
 	}
 }
 
