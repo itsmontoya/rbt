@@ -19,6 +19,7 @@ func New() *Tree {
 // Tree is a red-black tree data structure
 type Tree struct {
 	root *node
+	cnt  uint32
 }
 
 // Get will retrieve an item from a tree
@@ -59,15 +60,22 @@ func (t *Tree) Put(key string, val interface{}) {
 		// Root has changed, update root reference to the new root
 		t.root = t.root.parent
 	}
+
+	t.cnt++
 }
 
 // ForEach will iterate through each tree item
-func (t *Tree) ForEach(fn func(key string, val interface{})) {
+func (t *Tree) ForEach(fn ForEachFn) (ended bool) {
 	if t.root == nil {
 		// Root doesn't exist, return early
 		return
 	}
 
 	// Call iterate from root
-	t.root.iterate(fn)
+	return t.root.iterate(fn)
+}
+
+// Len will return the length of the data-store
+func (t *Tree) Len() (n int) {
+	return int(t.cnt)
 }

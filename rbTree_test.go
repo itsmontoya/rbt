@@ -165,12 +165,13 @@ func testPut(t *testing.T, s []int) {
 	}
 
 	var fecnt int
-	tr.ForEach(func(key string, val interface{}) {
+	tr.ForEach(func(key string, val interface{}) (end bool) {
 		if tm[key] != val {
 			t.Fatalf("invalid value:\nKey: %s\nExpected: %v\nReturned: %v\n", key, tm[key], val)
 		}
 
 		fecnt++
+		return
 	})
 
 	if fecnt != cnt {
@@ -223,8 +224,9 @@ func benchForEach(b *testing.B, s []string) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		tr.ForEach(func(_ string, val interface{}) {
+		tr.ForEach(func(_ string, val interface{}) (end bool) {
 			testVal = val
+			return
 		})
 	}
 }
@@ -313,6 +315,7 @@ func benchHarmonicForEach(b *testing.B, s []string) {
 	for i := 0; i < b.N; i++ {
 		h.ForEach(func(_ string, val interface{}) {
 			testVal = val
+			return
 		})
 	}
 }

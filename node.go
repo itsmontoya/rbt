@@ -292,15 +292,21 @@ func (n *node) numBlack() (nb int) {
 	return
 }
 
-func (n *node) iterate(fn func(key string, val interface{})) {
+func (n *node) iterate(fn ForEachFn) (ended bool) {
 	if child := n.children[0]; child != nil {
-		child.iterate(fn)
+		if ended = child.iterate(fn); ended {
+			return
+		}
 	}
 
-	fn(n.key, n.val)
+	if ended = fn(n.key, n.val); ended {
+		return
+	}
 
 	if child := n.children[1]; child != nil {
-		child.iterate(fn)
+		if ended = child.iterate(fn); ended {
+			return
+		}
 	}
 
 	return

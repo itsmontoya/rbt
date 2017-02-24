@@ -10,6 +10,9 @@ type color uint8
 
 type childType uint8
 
+// ForEachFn are used when calling ForEach from a Tree
+type ForEachFn func(key string, val interface{}) (end bool)
+
 func writeStrN(str string, n int) string {
 	b := make([]byte, 0, len(str)*n)
 	for i := 0; i < n; i++ {
