@@ -1,4 +1,4 @@
-# rbTree [![GoDoc](https://godoc.org/github.com/itsmontoya/rbTree?status.svg)](https://godoc.org/github.com/itsmontoya/rbTree) ![Status](https://img.shields.io/badge/status-alpha-red.svg)
+# rbTree [![GoDoc](https://godoc.org/github.com/itsmontoya/rbTree?status.svg)](https://godoc.org/github.com/itsmontoya/rbTree) ![Status](https://img.shields.io/badge/status-beta-yellow.svg)
 rbTree is a simple red-black tree for storing data in a sorted manner
 
 ## Benchmarks
