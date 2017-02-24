@@ -38,3 +38,16 @@ BenchmarkMapRandomPut-4         2000     1041122 ns/op    80643 B/op    10000 al
 BenchmarkMapForEach-4          10000      159575 ns/op        0 B/op        0 allocs/op
 
 ```
+
+## Memory usage
+```bash
+# Memory usage test involves setting 1 million keys and checking the total allocations with 
+# the populated data-store (See github.com/itsmontoya/rbTree/testing/allocs for source)
+
+# rbTree
+80005120 
+# map (with pre-set length)
+88565128 
+# skiplist
+91062448
+```
