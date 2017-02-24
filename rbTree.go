@@ -22,10 +22,6 @@ type Tree struct {
 	root *node
 }
 
-func (t *Tree) hasSamePathLength() bool {
-	return true
-}
-
 // Get will retrieve an item from a tree
 func (t *Tree) Get(key string) (val interface{}) {
 	if t.root == nil {
