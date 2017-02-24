@@ -4,7 +4,9 @@ import "fmt"
 
 func newNode(key string) *node {
 	var n node
+	// Set node key
 	n.key = key
+	// All new nodes start as red
 	n.c = colorRed
 	return &n
 }
@@ -17,29 +19,11 @@ type node struct {
 	key string
 	val interface{}
 
-	parent *node
-
+	parent   *node
 	children [2]*node
-
-	//	right *node
 }
 
-func (n *node) getHead() *node {
-	if child := n.children[0]; child != nil {
-		return child.getHead()
-	}
-
-	return n
-}
-
-func (n *node) getTail() *node {
-	if child := n.children[1]; child != nil {
-		return child.getTail()
-	}
-
-	return n
-}
-
+// getNode will return a node matching the provided key. It create is set to true, a new node will be created if no match is found
 func (n *node) getNode(key string, create bool) (tn *node) {
 	switch {
 	case key > n.key:
@@ -75,8 +59,28 @@ func (n *node) getNode(key string, create bool) (tn *node) {
 	case key == n.key:
 		return n
 	}
-	//t.root.key
+
 	return
+}
+
+// getHead will get the very first item starting from a given node
+// Note: If called from root, will return the first item in the tree
+func (n *node) getHead() *node {
+	if child := n.children[0]; child != nil {
+		return child.getHead()
+	}
+
+	return n
+}
+
+// getTail will get the very last item starting from a given node
+// Note: If called from root, will return the last item in the tree
+func (n *node) getTail() *node {
+	if child := n.children[1]; child != nil {
+		return child.getTail()
+	}
+
+	return n
 }
 
 func (n *node) getUncle() (un *node) {
