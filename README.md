@@ -1,12 +1,12 @@
-# redBlack [![GoDoc](https://godoc.org/github.com/itsmontoya/redBlack?status.svg)](https://godoc.org/github.com/itsmontoya/redBlack) ![Status](https://img.shields.io/badge/status-alpha-red.svg)
-redBlack is a simple red-black tree for storing data in a sorted manner
+# rbTree [![GoDoc](https://godoc.org/github.com/itsmontoya/rbTree?status.svg)](https://godoc.org/github.com/itsmontoya/rbTree) ![Status](https://img.shields.io/badge/status-alpha-red.svg)
+rbTree is a simple red-black tree for storing data in a sorted manner
 
 ## Benchmarks
 ```bash
 ## go --version
 ## > go version go1.8 linux/amd64
 
-# redBlack
+# rbTree
 BenchmarkGet-4                  1000     1764255 ns/op        0 B/op        0 allocs/op # Fastest 
 BenchmarkSortedGetPut-4          500     3942287 ns/op    81280 B/op    10020 allocs/op # Fastest 
 BenchmarkSortedPut-4            1000     2456036 ns/op    80640 B/op    10010 allocs/op # Fastest 

@@ -1,4 +1,4 @@
-package redBlack
+package rbTree
 
 import (
 	"fmt"

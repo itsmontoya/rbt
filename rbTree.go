@@ -1,4 +1,4 @@
-package redBlack
+package rbTree
 
 const (
 	colorBlack color = iota
@@ -17,11 +17,7 @@ func New() *Tree {
 	return &t
 }
 
-// Tree is a data structure
-// Red-black tree specifications:
-// - Root of tree is black
-// - There are no two adjacent red nodes (A red node cannot have a red parent or red child).
-// - Every path from root to a NULL node has same number of black nodes.
+// Tree is a red-black tree data structure
 type Tree struct {
 	root *node
 }
