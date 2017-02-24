@@ -56,6 +56,11 @@ func BenchmarkRandomPut(b *testing.B) {
 	b.ReportAllocs()
 }
 
+func BenchmarkForEach(b *testing.B) {
+	benchForEach(b, testSortedList)
+	b.ReportAllocs()
+}
+
 func BenchmarkMapSortedPut(b *testing.B) {
 	benchMapPut(b, testSortedList)
 	b.ReportAllocs()
@@ -73,6 +78,11 @@ func BenchmarkMapReversePut(b *testing.B) {
 
 func BenchmarkMapRandomPut(b *testing.B) {
 	benchMapPut(b, testRandomList)
+	b.ReportAllocs()
+}
+
+func BenchmarkMapForEach(b *testing.B) {
+	benchMapForEach(b, testSortedList)
 	b.ReportAllocs()
 }
 
@@ -190,6 +200,20 @@ func benchGetPut(b *testing.B, s []string) {
 	}
 }
 
+func benchForEach(b *testing.B, s []string) {
+	tr := New()
+	for i, key := range s {
+		tr.Put(key, i)
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		tr.ForEach(func(_ string, val interface{}) {
+			testVal = val
+		})
+	}
+}
+
 func benchMapPut(b *testing.B, s []string) {
 	b.ResetTimer()
 	m := make(map[string]interface{})
@@ -209,6 +233,20 @@ func benchMapGetPut(b *testing.B, s []string) {
 		for i, key := range s {
 			m[key] = i
 			testVal = m[key]
+		}
+	}
+}
+
+func benchMapForEach(b *testing.B, s []string) {
+	m := make(map[string]interface{})
+	for i, key := range s {
+		m[key] = i
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, val := range m {
+			testVal = val
 		}
 	}
 }
