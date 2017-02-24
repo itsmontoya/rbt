@@ -66,12 +66,3 @@ func (t *Tree) ForEach(fn func(key string, val interface{})) {
 
 	t.root.iterate(fn)
 }
-
-// Print will print the current tree
-func (t *Tree) Print() {
-	t.root.print(0)
-}
-
-type color uint8
-
-type childType uint8
