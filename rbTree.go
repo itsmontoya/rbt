@@ -13,8 +13,7 @@ const (
 
 // New will return a new Tree
 func New() *Tree {
-	var t Tree
-	return &t
+	return &Tree{}
 }
 
 // Tree is a red-black tree data structure
@@ -25,10 +24,12 @@ type Tree struct {
 // Get will retrieve an item from a tree
 func (t *Tree) Get(key string) (val interface{}) {
 	if t.root == nil {
+		// Root doesn't exist, return early
 		return
 	}
 
 	if n := t.root.getNode(key, false); n != nil {
+		// Node was found, set value as the node's value
 		val = n.val
 	}
 
@@ -39,17 +40,23 @@ func (t *Tree) Get(key string) (val interface{}) {
 func (t *Tree) Put(key string, val interface{}) {
 	var n *node
 	if t.root == nil {
+		// Root doesn't exist, we can create one
 		n = newNode(key)
 		t.root = n
 	} else {
+		// Find node whose key matches our provided key, if node does not exist - create it.
 		n = t.root.getNode(key, true)
 	}
 
 	n.val = val
+	// Balance tree after insert
+	// TODO: This can be moved into the node-creation portion
 	n.balance()
+	// TODO: Remove this, I don't believe it's actually needed now that the percolation is working properly
 	t.root.balance()
 
 	if t.root.ct != childRoot {
+		// Root has changed, update root reference to the new root
 		t.root = t.root.parent
 	}
 }
@@ -57,8 +64,10 @@ func (t *Tree) Put(key string, val interface{}) {
 // ForEach will iterate through each tree item
 func (t *Tree) ForEach(fn func(key string, val interface{})) {
 	if t.root == nil {
+		// Root doesn't exist, return early
 		return
 	}
 
+	// Call iterate from root
 	t.root.iterate(fn)
 }
