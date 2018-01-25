@@ -1,6 +1,7 @@
 package rbTree
 
 import (
+	"bytes"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -8,13 +9,16 @@ import (
 	"testing"
 
 	"github.com/OneOfOne/skiplist"
-	"github.com/itsmontoya/harmonic"
 )
 
 var (
-	testSortedList  = getStrSlice(getSorted(10000))
-	testReverseList = getStrSlice(getReverse(10000))
-	testRandomList  = getStrSlice(getRand(10000))
+	testSortedList  = getSorted(10000)
+	testReverseList = getReverse(10000)
+	testRandomList  = getRand(10000)
+
+	testSortedListStr  = getStrSlice(testSortedList)
+	testReverseListStr = getStrSlice(testReverseList)
+	testRandomListStr  = getStrSlice(testRandomList)
 
 	testVal interface{}
 )
@@ -32,141 +36,116 @@ func TestRandomPut(t *testing.T) {
 }
 
 func BenchmarkGet(b *testing.B) {
-	benchGet(b, testSortedList)
+	benchGet(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
 func BenchmarkSortedGetPut(b *testing.B) {
-	benchGetPut(b, testSortedList)
+	benchGetPut(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
 func BenchmarkSortedPut(b *testing.B) {
-	benchPut(b, testSortedList)
+	benchPut(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
 func BenchmarkReversePut(b *testing.B) {
-	benchPut(b, testReverseList)
+	benchPut(b, testReverseListStr)
 	b.ReportAllocs()
 }
 
 func BenchmarkRandomPut(b *testing.B) {
-	benchPut(b, testRandomList)
+	benchPut(b, testRandomListStr)
 	b.ReportAllocs()
 }
 
 func BenchmarkForEach(b *testing.B) {
-	benchForEach(b, testSortedList)
+	benchForEach(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
 func BenchmarkMapGet(b *testing.B) {
-	benchMapGet(b, testSortedList)
+	benchMapGet(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
 func BenchmarkMapSortedGetPut(b *testing.B) {
-	benchMapGetPut(b, testSortedList)
+	benchMapGetPut(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
 func BenchmarkMapSortedPut(b *testing.B) {
-	benchMapPut(b, testSortedList)
+	benchMapPut(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
 func BenchmarkMapReversePut(b *testing.B) {
-	benchMapPut(b, testReverseList)
+	benchMapPut(b, testReverseListStr)
 	b.ReportAllocs()
 }
 
 func BenchmarkMapRandomPut(b *testing.B) {
-	benchMapPut(b, testRandomList)
+	benchMapPut(b, testRandomListStr)
 	b.ReportAllocs()
 }
 
 func BenchmarkMapForEach(b *testing.B) {
-	benchMapForEach(b, testSortedList)
+	benchMapForEach(b, testSortedListStr)
 	b.ReportAllocs()
 }
-
-func BenchmarkHarmonicSortedGetPut(b *testing.B) {
-	benchHarmonicGetPut(b, testSortedList)
-	b.ReportAllocs()
-}
-
-func BenchmarkHarmonicSortedPut(b *testing.B) {
-	benchHarmonicPut(b, testSortedList)
-	b.ReportAllocs()
-}
-
-func BenchmarkHarmonicReversePut(b *testing.B) {
-	benchHarmonicPut(b, testReverseList)
-	b.ReportAllocs()
-}
-
-func BenchmarkHarmonicRandomPut(b *testing.B) {
-	benchHarmonicPut(b, testRandomList)
-	b.ReportAllocs()
-}
-
-func BenchmarkHarmonicForEach(b *testing.B) {
-	benchHarmonicForEach(b, testSortedList)
-	b.ReportAllocs()
-}
-
 func BenchmarkSkiplistGet(b *testing.B) {
-	benchSkiplistGet(b, testSortedList)
+	benchSkiplistGet(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
 func BenchmarkSkiplistSortedGetPut(b *testing.B) {
-	benchSkiplistGetPut(b, testSortedList)
+	benchSkiplistGetPut(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
 func BenchmarkSkiplistSortedPut(b *testing.B) {
-	benchSkiplistPut(b, testSortedList)
+	benchSkiplistPut(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
 func BenchmarkSkiplistReversePut(b *testing.B) {
-	benchSkiplistPut(b, testReverseList)
+	benchSkiplistPut(b, testReverseListStr)
 	b.ReportAllocs()
 }
 
 func BenchmarkSkiplistRandomPut(b *testing.B) {
-	benchSkiplistPut(b, testRandomList)
+	benchSkiplistPut(b, testRandomListStr)
 	b.ReportAllocs()
 }
 
 func BenchmarkSkiplistForEach(b *testing.B) {
-	benchSkiplistForEach(b, testSortedList)
+	benchSkiplistForEach(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
 func testPut(t *testing.T, s []int) {
 	cnt := len(s)
 	tr := New(cnt)
-	tm := make(map[string]interface{}, cnt)
+	tm := make(map[string][]byte, cnt)
 
 	for _, v := range s {
 		key := fmt.Sprintf("%012d", v)
-		tr.Put(key, v)
-		tm[key] = v
+		val := []byte(strconv.Itoa(v))
+		tr.Put(key, val)
+		tm[key] = val
 	}
 
 	for key, mv := range tm {
 		val := tr.Get(key)
-		if val != mv {
+		if !bytes.Equal(val, mv) {
 			t.Fatalf("invalid value:\nKey: %s\nExpected: %v\nReturned: %v\n", key, mv, val)
 		}
 	}
 
 	var fecnt int
-	tr.ForEach(func(key string, val interface{}) (end bool) {
-		if tm[key] != val {
+	tr.ForEach(func(key string, val []byte) (end bool) {
+		if !bytes.Equal(val, tm[key]) {
 			t.Fatalf("invalid value:\nKey: %s\nExpected: %v\nReturned: %v\n", key, tm[key], val)
 		}
 
@@ -179,99 +158,99 @@ func testPut(t *testing.T, s []int) {
 	}
 }
 
-func benchGet(b *testing.B, s []string) {
+func benchGet(b *testing.B, s []kv) {
 	tr := New(len(s))
-	for i, key := range s {
-		tr.Put(key, i)
+	for _, kv := range s {
+		tr.Put(kv.key, kv.val)
 	}
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		for _, key := range s {
-			testVal = tr.Get(key)
+		for _, kv := range s {
+			testVal = tr.Get(kv.key)
 		}
 	}
 }
 
-func benchPut(b *testing.B, s []string) {
+func benchPut(b *testing.B, s []kv) {
 	b.ResetTimer()
 	tr := New(len(s))
 
 	for i := 0; i < b.N; i++ {
-		for i, key := range s {
-			tr.Put(key, i)
+		for _, kv := range s {
+			tr.Put(kv.key, kv.val)
 		}
 	}
 }
 
-func benchGetPut(b *testing.B, s []string) {
+func benchGetPut(b *testing.B, s []kv) {
 	b.ResetTimer()
 	tr := New(len(s))
 
 	for i := 0; i < b.N; i++ {
-		for i, key := range s {
-			tr.Put(key, i)
-			testVal = tr.Get(key)
+		for _, kv := range s {
+			tr.Put(kv.key, kv.val)
+			testVal = tr.Get(kv.key)
 		}
 	}
 }
 
-func benchForEach(b *testing.B, s []string) {
+func benchForEach(b *testing.B, s []kv) {
 	tr := New(len(s))
-	for i, key := range s {
-		tr.Put(key, i)
+	for _, kv := range s {
+		tr.Put(kv.key, kv.val)
 	}
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		tr.ForEach(func(_ string, val interface{}) (end bool) {
+		tr.ForEach(func(_ string, val []byte) (end bool) {
 			testVal = val
 			return
 		})
 	}
 }
 
-func benchMapGet(b *testing.B, s []string) {
-	m := make(map[string]interface{})
-	for i, key := range s {
-		m[key] = i
+func benchMapGet(b *testing.B, s []kv) {
+	m := make(map[string][]byte)
+	for _, kv := range s {
+		m[kv.key] = kv.val
 	}
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		for _, key := range s {
-			testVal = m[key]
+		for _, kv := range s {
+			testVal = m[kv.key]
 		}
 	}
 }
 
-func benchMapPut(b *testing.B, s []string) {
+func benchMapPut(b *testing.B, s []kv) {
 	b.ResetTimer()
-	m := make(map[string]interface{})
+	m := make(map[string][]byte)
 
 	for i := 0; i < b.N; i++ {
-		for i, key := range s {
-			m[key] = i
+		for _, kv := range s {
+			m[kv.key] = kv.val
 		}
 	}
 }
 
-func benchMapGetPut(b *testing.B, s []string) {
+func benchMapGetPut(b *testing.B, s []kv) {
 	b.ResetTimer()
-	m := make(map[string]interface{})
+	m := make(map[string][]byte)
 
 	for i := 0; i < b.N; i++ {
-		for i, key := range s {
-			m[key] = i
-			testVal = m[key]
+		for _, kv := range s {
+			testVal = m[kv.key]
+			m[kv.key] = kv.val
 		}
 	}
 }
 
-func benchMapForEach(b *testing.B, s []string) {
-	m := make(map[string]interface{})
-	for i, key := range s {
-		m[key] = i
+func benchMapForEach(b *testing.B, s []kv) {
+	m := make(map[string][]byte)
+	for _, kv := range s {
+		m[kv.key] = kv.val
 	}
 	b.ResetTimer()
 
@@ -282,84 +261,46 @@ func benchMapForEach(b *testing.B, s []string) {
 	}
 }
 
-func benchHarmonicPut(b *testing.B, s []string) {
-	b.ResetTimer()
-	h := harmonic.New(0)
-
-	for i := 0; i < b.N; i++ {
-		for i, key := range s {
-			h.Put(key, i)
-		}
-	}
-}
-
-func benchHarmonicGetPut(b *testing.B, s []string) {
-	b.ResetTimer()
-	h := harmonic.New(0)
-
-	for i := 0; i < b.N; i++ {
-		for i, key := range s {
-			h.Put(key, i)
-			testVal, _ = h.Get(key)
-		}
-	}
-}
-
-func benchHarmonicForEach(b *testing.B, s []string) {
-	h := harmonic.New(0)
-	for i, key := range s {
-		h.Put(key, i)
-	}
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		h.ForEach(func(_ string, val int) {
-			testVal = val
-			return
-		})
-	}
-}
-
-func benchSkiplistGet(b *testing.B, s []string) {
+func benchSkiplistGet(b *testing.B, s []kv) {
 	sl := skiplist.New(32)
-	for i, key := range s {
-		sl.Set(key, i)
+	for _, kv := range s {
+		sl.Set(kv.key, kv.val)
 	}
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		for _, key := range s {
-			testVal = sl.Get(key)
+		for _, kv := range s {
+			testVal = sl.Get(kv.key)
 		}
 	}
 }
 
-func benchSkiplistPut(b *testing.B, s []string) {
+func benchSkiplistPut(b *testing.B, s []kv) {
 	b.ResetTimer()
 	sl := skiplist.New(32)
 	for i := 0; i < b.N; i++ {
-		for i, key := range s {
-			sl.Set(key, i)
+		for _, kv := range s {
+			sl.Set(kv.key, kv.val)
 		}
 	}
 }
 
-func benchSkiplistGetPut(b *testing.B, s []string) {
+func benchSkiplistGetPut(b *testing.B, s []kv) {
 	b.ResetTimer()
 	sl := skiplist.New(32)
 
 	for i := 0; i < b.N; i++ {
-		for i, key := range s {
-			sl.Set(key, i)
-			testVal = sl.Get(key)
+		for _, kv := range s {
+			sl.Set(kv.key, kv.val)
+			testVal = sl.Get(kv.key)
 		}
 	}
 }
 
-func benchSkiplistForEach(b *testing.B, s []string) {
+func benchSkiplistForEach(b *testing.B, s []kv) {
 	sl := skiplist.New(32)
-	for i, key := range s {
-		sl.Set(key, i)
+	for _, kv := range s {
+		sl.Set(kv.key, kv.val)
 	}
 	b.ResetTimer()
 
@@ -371,11 +312,13 @@ func benchSkiplistForEach(b *testing.B, s []string) {
 	}
 }
 
-func getStrSlice(in []int) (out []string) {
-	out = make([]string, len(in))
+func getStrSlice(in []int) (out []kv) {
+	out = make([]kv, len(in))
 
-	for i, v := range in {
-		out[i] = strconv.Itoa(v)
+	for _, v := range in {
+		var kv kv
+		kv.key = strconv.Itoa(v)
+		kv.val = []byte(kv.key)
 	}
 
 	return
@@ -399,4 +342,9 @@ func getReverse(n int) (s []int) {
 
 func getRand(n int) (s []int) {
 	return rand.Perm(n)
+}
+
+type kv struct {
+	key string
+	val []byte
 }

@@ -17,7 +17,7 @@ type node struct {
 	ct childType
 
 	key string
-	val interface{}
+	val []byte
 
 	parent   int
 	children [2]int

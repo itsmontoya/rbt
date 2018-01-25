@@ -34,10 +34,9 @@ func (t *Tree) getNode(nidx int, key string, create bool) (idx int) {
 		return
 	}
 
-	n := t.nodes[nidx]
 	switch {
-	case key > n.key:
-		child := n.children[1]
+	case key > t.nodes[nidx].key:
+		child := t.nodes[nidx].children[1]
 		if child == -1 {
 			if !create {
 				return
@@ -54,8 +53,8 @@ func (t *Tree) getNode(nidx int, key string, create bool) (idx int) {
 
 		return t.getNode(child, key, create)
 
-	case key < n.key:
-		child := n.children[0]
+	case key < t.nodes[nidx].key:
+		child := t.nodes[nidx].children[0]
 		if child == -1 {
 			if !create {
 				return
@@ -72,7 +71,7 @@ func (t *Tree) getNode(nidx int, key string, create bool) (idx int) {
 
 		return t.getNode(child, key, create)
 
-	case key == n.key:
+	case key == t.nodes[nidx].key:
 		return nidx
 	}
 
@@ -169,26 +168,25 @@ func (t *Tree) getGrandparent(nidx int) (idx int) {
 }
 
 func (t *Tree) balance(nidx int) {
-	n := t.nodes[nidx]
 	switch {
-	case n.c == colorBlack:
+	case t.nodes[nidx].c == colorBlack:
 		return
-	case n.ct == childRoot:
-		if n.c == colorRed {
+	case t.nodes[nidx].ct == childRoot:
+		if t.nodes[nidx].c == colorRed {
 			t.nodes[nidx].c = colorBlack
 			return
 		}
 
 	case t.isRed(t.getUncle(nidx)):
-		t.setColor(n.parent, colorBlack)
+		t.setColor(t.nodes[nidx].parent, colorBlack)
 		t.setColor(t.getUncle(nidx), colorBlack)
 		grandparent := t.getGrandparent(nidx)
 		t.setColor(grandparent, colorRed)
 		// Balance grandparent
 		t.balance(grandparent)
 
-	case t.isRed(n.parent):
-		parent := n.parent
+	case t.isRed(t.nodes[nidx].parent):
+		parent := t.nodes[nidx].parent
 		grandparent := t.getParent(parent)
 
 		if t.isTriangle(nidx) {
@@ -205,12 +203,11 @@ func (t *Tree) balance(nidx int) {
 }
 
 func (t *Tree) leftRotate(nidx int) {
-	n := t.nodes[nidx]
-	parent := n.parent
+	parent := t.nodes[nidx].parent
 	grandparent := t.getParent(parent)
 
 	// Swap  children
-	swapChild := n.children[0]
+	swapChild := t.nodes[nidx].children[0]
 	t.nodes[parent].children[1] = swapChild
 	t.nodes[nidx].children[0] = parent
 
@@ -232,12 +229,11 @@ func (t *Tree) leftRotate(nidx int) {
 }
 
 func (t *Tree) rightRotate(nidx int) {
-	n := t.nodes[nidx]
-	parent := n.parent
+	parent := t.nodes[nidx].parent
 	grandparent := t.getParent(parent)
 
 	// Swap  children
-	swapChild := n.children[1]
+	swapChild := t.nodes[nidx].children[1]
 	t.nodes[parent].children[0] = swapChild
 	t.nodes[nidx].children[1] = parent
 
@@ -311,13 +307,12 @@ func (t *Tree) isTriangle(nidx int) (isTriangle bool) {
 		return
 	}
 
-	n := t.nodes[nidx]
-	parent := t.nodes[n.parent]
-	if n.ct == childLeft && parent.ct == childRight {
+	parent := t.nodes[nidx].parent
+	if t.nodes[nidx].ct == childLeft && t.nodes[parent].ct == childRight {
 		return true
 	}
 
-	if n.ct == childRight && parent.ct == childLeft {
+	if t.nodes[nidx].ct == childRight && t.nodes[parent].ct == childLeft {
 		return true
 	}
 
@@ -329,16 +324,15 @@ func (t *Tree) numBlack(nidx int) (nb int) {
 		return
 	}
 
-	n := t.nodes[nidx]
-	if n.c == colorBlack {
+	if t.nodes[nidx].c == colorBlack {
 		nb = 1
 	}
 
-	if child := n.children[0]; child != -1 {
+	if child := t.nodes[nidx].children[0]; child != -1 {
 		nb += t.numBlack(child)
 	}
 
-	if child := n.children[1]; child != -1 {
+	if child := t.nodes[nidx].children[1]; child != -1 {
 		nb += t.numBlack(child)
 	}
 
@@ -346,18 +340,17 @@ func (t *Tree) numBlack(nidx int) (nb int) {
 }
 
 func (t *Tree) iterate(nidx int, fn ForEachFn) (ended bool) {
-	n := t.nodes[nidx]
-	if child := n.children[0]; child != -1 {
+	if child := t.nodes[nidx].children[0]; child != -1 {
 		if ended = t.iterate(child, fn); ended {
 			return
 		}
 	}
 
-	if ended = fn(n.key, n.val); ended {
+	if ended = fn(t.nodes[nidx].key, t.nodes[nidx].val); ended {
 		return
 	}
 
-	if child := n.children[1]; child != -1 {
+	if child := t.nodes[nidx].children[1]; child != -1 {
 		if ended = t.iterate(child, fn); ended {
 			return
 		}
@@ -368,7 +361,7 @@ func (t *Tree) iterate(nidx int, fn ForEachFn) (ended bool) {
 }
 
 // Get will retrieve an item from a tree
-func (t *Tree) Get(key string) (val interface{}) {
+func (t *Tree) Get(key string) (val []byte) {
 	if nidx := t.getNode(t.root, key, false); nidx != -1 {
 		// Node was found, set value as the node's value
 		val = t.nodes[nidx].val
@@ -378,7 +371,7 @@ func (t *Tree) Get(key string) (val interface{}) {
 }
 
 // Put will insert an item into the tree
-func (t *Tree) Put(key string, val interface{}) {
+func (t *Tree) Put(key string, val []byte) {
 	var nidx int
 	if t.root == -1 {
 		// Root doesn't exist, we can create one
@@ -395,8 +388,6 @@ func (t *Tree) Put(key string, val interface{}) {
 	// Balance tree after insert
 	// TODO: This can be moved into the node-creation portion
 	t.balance(nidx)
-	// TODO: Remove this, I don't believe it's actually needed now that the percolation is working properly
-	//t.balance(t.root)
 
 	if t.nodes[t.root].ct != childRoot {
 		// Root has changed, update root reference to the new root
