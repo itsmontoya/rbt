@@ -20,7 +20,7 @@ var (
 	testReverseListStr = getStrSlice(testReverseList)
 	testRandomListStr  = getStrSlice(testRandomList)
 
-	testVal interface{}
+	testVal []byte
 )
 
 func TestSortedPut(t *testing.T) {
@@ -270,7 +270,7 @@ func benchSkiplistGet(b *testing.B, s []kv) {
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
-			testVal = sl.Get(kv.key)
+			testVal = sl.Get(kv.key).([]byte)
 		}
 	}
 }
@@ -292,7 +292,7 @@ func benchSkiplistGetPut(b *testing.B, s []kv) {
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
 			sl.Set(kv.key, kv.val)
-			testVal = sl.Get(kv.key)
+			testVal = sl.Get(kv.key).([]byte)
 		}
 	}
 }
@@ -306,7 +306,7 @@ func benchSkiplistForEach(b *testing.B, s []kv) {
 
 	for i := 0; i < b.N; i++ {
 		sl.ForEach(func(_ string, val interface{}) bool {
-			testVal = val
+			testVal = val.([]byte)
 			return false
 		})
 	}
