@@ -22,16 +22,6 @@ func writeStrN(str string, n int) string {
 	return string(b)
 }
 
-func printNodes(n *node, row int) {
-	if n == nil {
-		return
-	}
-
-	printNode(n, row)
-	printNodes(n.children[0], row+1)
-	printNodes(n.children[1], row+1)
-}
-
 func printNode(n *node, row int) {
 	if n == nil {
 		return

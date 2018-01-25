@@ -147,8 +147,8 @@ func BenchmarkSkiplistForEach(b *testing.B) {
 }
 
 func testPut(t *testing.T, s []int) {
-	tr := New()
 	cnt := len(s)
+	tr := New(cnt)
 	tm := make(map[string]interface{}, cnt)
 
 	for _, v := range s {
@@ -180,7 +180,7 @@ func testPut(t *testing.T, s []int) {
 }
 
 func benchGet(b *testing.B, s []string) {
-	tr := New()
+	tr := New(len(s))
 	for i, key := range s {
 		tr.Put(key, i)
 	}
@@ -195,7 +195,7 @@ func benchGet(b *testing.B, s []string) {
 
 func benchPut(b *testing.B, s []string) {
 	b.ResetTimer()
-	tr := New()
+	tr := New(len(s))
 
 	for i := 0; i < b.N; i++ {
 		for i, key := range s {
@@ -206,7 +206,7 @@ func benchPut(b *testing.B, s []string) {
 
 func benchGetPut(b *testing.B, s []string) {
 	b.ResetTimer()
-	tr := New()
+	tr := New(len(s))
 
 	for i := 0; i < b.N; i++ {
 		for i, key := range s {
@@ -217,7 +217,7 @@ func benchGetPut(b *testing.B, s []string) {
 }
 
 func benchForEach(b *testing.B, s []string) {
-	tr := New()
+	tr := New(len(s))
 	for i, key := range s {
 		tr.Put(key, i)
 	}
