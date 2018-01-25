@@ -313,7 +313,7 @@ func benchHarmonicForEach(b *testing.B, s []string) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		h.ForEach(func(_ string, val interface{}) {
+		h.ForEach(func(_ string, val int) {
 			testVal = val
 			return
 		})
@@ -393,7 +393,7 @@ func getSorted(n int) (s []int) {
 
 func getReverse(n int) (s []int) {
 	s = getSorted(n)
-	sort.Reverse(sort.IntSlice(s))
+	_ = sort.Reverse(sort.IntSlice(s))
 	return
 }
 
