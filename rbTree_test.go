@@ -319,6 +319,7 @@ func getStrSlice(in []int) (out []kv) {
 		var kv kv
 		kv.key = strconv.Itoa(v)
 		kv.val = []byte(kv.key)
+		out = append(out, kv)
 	}
 
 	return
