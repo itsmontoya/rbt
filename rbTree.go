@@ -1,5 +1,7 @@
 package rbTree
 
+import "strings"
+
 const (
 	colorBlack color = iota
 	colorRed
@@ -34,8 +36,8 @@ func (t *Tree) getNode(nidx int, key string, create bool) (idx int) {
 		return
 	}
 
-	switch {
-	case key > t.nodes[nidx].key:
+	switch strings.Compare(t.nodes[nidx].key, key) {
+	case 1:
 		child := t.nodes[nidx].children[1]
 		if child == -1 {
 			if !create {
@@ -53,7 +55,7 @@ func (t *Tree) getNode(nidx int, key string, create bool) (idx int) {
 
 		return t.getNode(child, key, create)
 
-	case key < t.nodes[nidx].key:
+	case -1:
 		child := t.nodes[nidx].children[0]
 		if child == -1 {
 			if !create {
@@ -71,7 +73,7 @@ func (t *Tree) getNode(nidx int, key string, create bool) (idx int) {
 
 		return t.getNode(child, key, create)
 
-	case key == t.nodes[nidx].key:
+	case 0:
 		return nidx
 	}
 
