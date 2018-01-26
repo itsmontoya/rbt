@@ -2,13 +2,13 @@ package rbTree
 
 func newBlock(key []byte) (b Block) {
 	// All new blocks start as red
-	n.c = colorRed
+	b.c = colorRed
 	// Set parent and children to their zero values
-	n.parent = -1
-	n.children[0] = -1
-	n.children[1] = -1
+	b.parent = -1
+	b.children[0] = -1
+	b.children[1] = -1
 	// Set key length
-	b.keyLen = len(key)
+	b.keyLen = int64(len(key))
 	return
 }
 
@@ -23,11 +23,15 @@ type Block struct {
 	c  color
 	ct childType
 
-	parent   int
-	children [2]int
+	offset     int64
+	blobOffset int64
+	parent     int64
+	children   [2]int64
 
-	keyLen int
-	valLen int
+	keyLen int64
+	valLen int64
+
+	derp byte
 }
 
 // Blob represents a Key/Value entry
