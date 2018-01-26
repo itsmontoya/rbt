@@ -7,7 +7,7 @@ rbTree is a simple red-black tree for storing data in a sorted manner
 ## > go version go1.9.3 linux/amd64
 
 # rbTree
-BenchmarkGet-16                     500    3672168 ns/op         0 B/op        0 allocs/op # Fastest
+BenchmarkGet-16                     500    3672168 ns/op         0 B/op        0 allocs/op
 BenchmarkSortedGetPut-16            200    7257202 ns/op      7208 B/op        0 allocs/op # Fastest
 BenchmarkSortedPut-16               300    3897592 ns/op      4805 B/op        0 allocs/op # Fastest
 BenchmarkReversePut-16              300    3831036 ns/op      4805 B/op        0 allocs/op # Fastest
@@ -15,7 +15,7 @@ BenchmarkRandomPut-16               300    4314028 ns/op      4805 B/op        0
 BenchmarkForEach-16               20000      94837 ns/op         0 B/op        0 allocs/op
 
 # Skiplist (github.com/OneOfOne/skiplist)
-BenchmarkSkiplistGet-16             500    2610549 ns/op         0 B/op        0 allocs/op
+BenchmarkSkiplistGet-16             500    2610549 ns/op         0 B/op        0 allocs/op # Fastest
 BenchmarkSkiplistSortedGetPut-16    200    8072147 ns/op    323778 B/op    10100 allocs/op
 BenchmarkSkiplistSortedPut-16       300    5324434 ns/op    322520 B/op    10066 allocs/op
 BenchmarkSkiplistReversePut-16      300    6091060 ns/op    322521 B/op    10066 allocs/op
