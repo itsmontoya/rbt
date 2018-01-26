@@ -24,7 +24,8 @@ func populateN(n int) (s *skiplist.List) {
 	s = skiplist.New(32)
 
 	for i := 0; i < n; i++ {
-		s.Set(strconv.Itoa(i), i)
+		key := strconv.Itoa(i)
+		s.Set(key, []byte(key))
 	}
 
 	return

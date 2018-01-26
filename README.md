@@ -37,9 +37,9 @@ BenchmarkMapForEach-16            10000     151997 ns/op         0 B/op        0
 # the populated data-store (See github.com/itsmontoya/rbTree/testing/allocs for source)
 
 # rbTree
-80005120 
+88025720 
 # map (with pre-set length)
-88565128 
+109605384 
 # skiplist
-91062448
+123108784
 ```
