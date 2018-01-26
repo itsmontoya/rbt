@@ -1,6 +1,6 @@
 package rbTree
 
-import "strings"
+import "bytes"
 
 const (
 	colorBlack color = iota
@@ -30,13 +30,13 @@ type Tree struct {
 }
 
 // getNode will return a node matching the provided key. It create is set to true, a new node will be created if no match is found
-func (t *Tree) getNode(nidx int, key string, create bool) (idx int) {
+func (t *Tree) getNode(nidx int, key []byte, create bool) (idx int) {
 	idx = -1
 	if nidx == -1 {
 		return
 	}
 
-	switch strings.Compare(t.nodes[nidx].key, key) {
+	switch bytes.Compare(t.nodes[nidx].key, key) {
 	case 1:
 		child := t.nodes[nidx].children[1]
 		if child == -1 {
@@ -363,7 +363,7 @@ func (t *Tree) iterate(nidx int, fn ForEachFn) (ended bool) {
 }
 
 // Get will retrieve an item from a tree
-func (t *Tree) Get(key string) (val []byte) {
+func (t *Tree) Get(key []byte) (val []byte) {
 	if nidx := t.getNode(t.root, key, false); nidx != -1 {
 		// Node was found, set value as the node's value
 		val = t.nodes[nidx].val
@@ -373,7 +373,7 @@ func (t *Tree) Get(key string) (val []byte) {
 }
 
 // Put will insert an item into the tree
-func (t *Tree) Put(key string, val []byte) {
+func (t *Tree) Put(key, val []byte) {
 	var nidx int
 	if t.root == -1 {
 		// Root doesn't exist, we can create one

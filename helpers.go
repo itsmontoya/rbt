@@ -11,7 +11,7 @@ type color uint8
 type childType uint8
 
 // ForEachFn are used when calling ForEach from a Tree
-type ForEachFn func(key string, val []byte) (end bool)
+type ForEachFn func(key, val []byte) (end bool)
 
 func writeStrN(str string, n int) string {
 	b := make([]byte, 0, len(str)*n)
@@ -27,7 +27,7 @@ func printNode(n *node, row int) {
 		return
 	}
 
-	key := n.key
+	key := string(n.key)
 	if n.c == colorRed {
 		key = fcolor.RedString(key)
 	}
