@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/missionMeteora/journaler"
 
@@ -17,22 +18,26 @@ func main() {
 	strs := getStrSlice(list)
 	tr := rbTree.New(10000)
 	runtime.GC()
+	time.Sleep(time.Second * 3)
 	journaler.Notification("Values initialized, test starting")
 	p := profile.Start(profile.MemProfile, profile.ProfilePath("."), profile.NoShutdownHook)
 	defer p.Stop()
 
-	for i := 0; i < 10; i++ {
-		for _, v := range list {
-			tr.Put(strs[v], v)
+	for i := 0; i < 1000; i++ {
+		for _, kv := range strs {
+			tr.Put(kv.key, kv.val)
 		}
 	}
 }
 
-func getStrSlice(in []int) (out []string) {
-	out = make([]string, len(in))
+func getStrSlice(in []int) (out []kv) {
+	out = make([]kv, len(in))
 
-	for i, v := range in {
-		out[i] = strconv.Itoa(v)
+	for _, v := range in {
+		var kv kv
+		kv.key = strconv.Itoa(v)
+		kv.val = []byte(kv.key)
+		out = append(out, kv)
 	}
 
 	return
@@ -56,4 +61,9 @@ func getReverse(n int) (s []int) {
 
 func getRand(n int) (s []int) {
 	return rand.Perm(n)
+}
+
+type kv struct {
+	key string
+	val []byte
 }
