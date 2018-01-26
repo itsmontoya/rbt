@@ -132,21 +132,21 @@ func testPut(t *testing.T, s []int) {
 	for _, v := range s {
 		key := fmt.Sprintf("%012d", v)
 		val := []byte(strconv.Itoa(v))
-		tr.Put(key, val)
+		tr.Put([]byte(key), val)
 		tm[key] = val
 	}
 
 	for key, mv := range tm {
-		val := tr.Get(key)
+		val := tr.Get([]byte(key))
 		if !bytes.Equal(val, mv) {
 			t.Fatalf("invalid value:\nKey: %s\nExpected: %v\nReturned: %v\n", key, mv, val)
 		}
 	}
 
 	var fecnt int
-	tr.ForEach(func(key string, val []byte) (end bool) {
-		if !bytes.Equal(val, tm[key]) {
-			t.Fatalf("invalid value:\nKey: %s\nExpected: %v\nReturned: %v\n", key, tm[key], val)
+	tr.ForEach(func(key, val []byte) (end bool) {
+		if !bytes.Equal(val, tm[string(key)]) {
+			t.Fatalf("invalid value:\nKey: %s\nExpected: %v\nReturned: %v\n", key, tm[string(key)], val)
 		}
 
 		fecnt++
@@ -161,13 +161,13 @@ func testPut(t *testing.T, s []int) {
 func benchGet(b *testing.B, s []kv) {
 	tr := New(len(s))
 	for _, kv := range s {
-		tr.Put(kv.key, kv.val)
+		tr.Put(kv.val, kv.val)
 	}
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
-			testVal = tr.Get(kv.key)
+			testVal = tr.Get(kv.val)
 		}
 	}
 }
@@ -178,7 +178,7 @@ func benchPut(b *testing.B, s []kv) {
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
-			tr.Put(kv.key, kv.val)
+			tr.Put(kv.val, kv.val)
 		}
 	}
 }
@@ -189,8 +189,8 @@ func benchGetPut(b *testing.B, s []kv) {
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
-			tr.Put(kv.key, kv.val)
-			testVal = tr.Get(kv.key)
+			tr.Put(kv.val, kv.val)
+			testVal = tr.Get(kv.val)
 		}
 	}
 }
@@ -198,12 +198,12 @@ func benchGetPut(b *testing.B, s []kv) {
 func benchForEach(b *testing.B, s []kv) {
 	tr := New(len(s))
 	for _, kv := range s {
-		tr.Put(kv.key, kv.val)
+		tr.Put(kv.val, kv.val)
 	}
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		tr.ForEach(func(_ string, val []byte) (end bool) {
+		tr.ForEach(func(_, val []byte) (end bool) {
 			testVal = val
 			return
 		})

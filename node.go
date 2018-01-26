@@ -1,6 +1,6 @@
 package rbTree
 
-func newNode(key string) (n node) {
+func newNode(key []byte) (n node) {
 	// Set node key
 	n.key = key
 	// All new nodes start as red
@@ -16,7 +16,7 @@ type node struct {
 	c  color
 	ct childType
 
-	key string
+	key []byte
 	val []byte
 
 	parent   int
