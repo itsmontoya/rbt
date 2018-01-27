@@ -2,12 +2,7 @@ package rbTree
 
 import (
 	"bytes"
-	"os"
-	"path"
 	"unsafe"
-
-	"github.com/edsrzf/mmap-go"
-	"github.com/missionMeteora/journaler"
 )
 
 const (
@@ -31,79 +26,31 @@ var (
 )
 
 // New will return a new Tree
-// cnt is the initial backend entries capacity
-// keySize is the approximate key size (in bytes)
-// valSize is the approximate value size (in bytes)
-func New(cnt, keySize, valSize int64) (t *Tree) {
-	sz := getSize(cnt, keySize, valSize)
-	t = newTree(sz, make([]byte, sz))
-	t.gfn = t.growByteslice
+// sz is the size (in bytes) to initially allocate for this db
+func New(sz int64) (t *Tree) {
+	t = newTree(sz)
+	bs := NewBytes()
+	t.gfn = bs.grow
 	return
 }
 
 // NewMMAP will return a new MMAP tree
-func NewMMAP(dir, name string, cnt, keySize, valSize int64) (t *Tree, err error) {
-	sz := getSize(cnt, keySize, valSize)
-
-	var f *os.File
-	if f, err = os.OpenFile(path.Join(dir, name), os.O_CREATE|os.O_RDWR, 0644); err != nil {
+// sz is the size (in bytes) to initially allocate for this db
+func NewMMAP(dir, name string, sz int64) (t *Tree, err error) {
+	var mm *MMap
+	if mm, err = newMMap(dir, name); err != nil {
 		return
 	}
 
-	var fi os.FileInfo
-	if fi, err = f.Stat(); err != nil {
-		return
-	}
-
-	if fi.Size() == 0 {
-		if err = f.Truncate(sz); err != nil {
-			return
-		}
-	}
-
-	var mm mmap.MMap
-	if mm, err = mmap.Map(f, os.O_RDWR, 0); err != nil {
-		return
-	}
-
-	t = newTree(sz, mm)
-	t.gfn = func(sz int64) (bs []byte) {
-		for t.t.cap < sz {
-			t.t.cap *= 2
-		}
-		cap := t.t.cap
-
-		var err error
-		if err = mm.Unmap(); err != nil {
-			journaler.Error("Unmap error: %v", err)
-			return
-		}
-
-		if err = f.Truncate(cap); err != nil {
-			journaler.Error("Truncate error: %v", err)
-			return
-		}
-
-		if mm, err = mmap.Map(f, os.O_RDWR, 0); err != nil {
-			journaler.Error("Map error: %v", err)
-			return
-		}
-
-		return mm
-	}
-
-	t.cfn = func() {
-		mm.Flush()
-		mm.Unmap()
-		f.Close()
-	}
-
+	t = newTree(sz)
+	t.gfn = mm.grow
+	t.cfn = mm.Close
 	return
 }
 
-func newTree(sz int64, bs []byte) *Tree {
+func newTree(sz int64) *Tree {
 	var t Tree
-	t.bs = bs
+	t.grow(sz)
 	t.setTrunk()
 
 	if t.t.tail == 0 {
@@ -121,7 +68,7 @@ type Tree struct {
 	t  *trunk
 
 	gfn GrowFn
-	cfn func()
+	cfn func() error
 }
 
 type trunk struct {
@@ -606,6 +553,10 @@ func (t *Tree) Len() (n int) {
 }
 
 // Close will close a tree
-func (t *Tree) Close() {
-	t.cfn()
+func (t *Tree) Close() (err error) {
+	if t.cfn == nil {
+		return
+	}
+
+	return t.cfn()
 }
