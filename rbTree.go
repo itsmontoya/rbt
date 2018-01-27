@@ -28,7 +28,7 @@ var (
 // New will return a new Tree
 // sz is the size (in bytes) to initially allocate for this db
 func New(sz int64) (t *Tree) {
-	bs := NewBytes()
+	bs := newBytes()
 	t = newTree(sz, bs.grow, nil)
 	return
 }

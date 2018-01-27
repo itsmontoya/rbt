@@ -1,7 +1,7 @@
 package rbTree
 
-// NewBytes will return a new byteslice backend
-func NewBytes() *Bytes {
+// newBytes will return a new byteslice backend
+func newBytes() *Bytes {
 	var b Bytes
 	return &b
 }
