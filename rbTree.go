@@ -1,6 +1,11 @@
 package rbTree
 
-import "bytes"
+import (
+	"bytes"
+	"unsafe"
+
+	"github.com/missionMeteora/journaler"
+)
 
 const (
 	colorBlack color = iota
@@ -13,267 +18,361 @@ const (
 	childRight
 )
 
+// Note: These have to be variables in order to be referenced
+var (
+	trunkSizePtr = unsafe.Sizeof(trunk{})
+	blockSizePtr = unsafe.Sizeof(Block{})
+
+	trunkSize = *(*int64)(unsafe.Pointer(&trunkSizePtr))
+	blockSize = *(*int64)(unsafe.Pointer(&blockSizePtr))
+)
+
 // New will return a new Tree
-func New(sz int) *Tree {
+// Count is the initial backend entries capacity
+// keySize is the approximate key size (in bytes)
+// valSize is the approximate value size (in bytes)
+func New(cnt, keySize, valSize int64) *Tree {
 	var t Tree
-	t.root = -1
-	t.nodes = make([]node, 0, sz)
+	sz := keySize + valSize + blockSize
+	sz *= cnt
+	sz += trunkSize
+
+	t.bs = make([]byte, sz)
+	t.setTrunk()
+	t.t.root = -1
+	t.t.tail = trunkSize
+	t.t.cap = sz
 	return &t
 }
 
 // Tree is a red-black tree data structure
 type Tree struct {
-	nodes []node
-	root  int
-	tail  int
-	cnt   uint32
+	bs []byte
+	t  *trunk
 }
 
-// getNode will return a node matching the provided key. It create is set to true, a new node will be created if no match is found
-func (t *Tree) getNode(nidx int, key []byte, create bool) (idx int) {
-	idx = -1
-	if nidx == -1 {
+type trunk struct {
+	root int64
+	cnt  int64
+	tail int64
+	cap  int64
+}
+
+func (t *Tree) setTrunk() {
+	t.t = (*trunk)(unsafe.Pointer(&t.bs[0]))
+}
+
+func (t *Tree) getBlock(offset int64) (b *Block) {
+	if offset == -1 {
 		return
 	}
 
-	switch bytes.Compare(t.nodes[nidx].key, key) {
-	case 1:
-		child := t.nodes[nidx].children[1]
-		if child == -1 {
-			if !create {
-				return
-			}
+	return (*Block)(unsafe.Pointer(&t.bs[offset]))
+}
 
-			tn := newNode(key)
-			tn.ct = childRight
-			tn.parent = nidx
-			idx = len(t.nodes)
-			t.nodes[nidx].children[1] = idx
-			t.nodes = append(t.nodes, tn)
-			return
-		}
+func (t *Tree) newBlock(key []byte) (b *Block, offset int64, grew bool) {
+	offset = t.t.tail
+	grew = t.grow(offset + blockSize)
 
-		return t.getNode(child, key, create)
+	b = t.getBlock(offset)
+	t.t.tail += blockSize
 
-	case -1:
-		child := t.nodes[nidx].children[0]
-		if child == -1 {
-			if !create {
-				return
-			}
+	// All new blocks start as red
+	b.c = colorRed
+	// Set offset and blob offset
+	b.offset = offset
+	b.blobOffset = -1
+	// Set parent and children to their zero values
+	b.parent = -1
+	b.children[0] = -1
+	b.children[1] = -1
+	// Set key length
+	b.keyLen = int64(len(key))
+	// Debug
+	b.derp = 67
+	return
+}
 
-			tn := newNode(key)
-			tn.ct = childLeft
-			tn.parent = nidx
-			idx = len(t.nodes)
-			t.nodes[nidx].children[0] = idx
-			t.nodes = append(t.nodes, tn)
-			return
-		}
+func (t *Tree) newBlob(key, value []byte) (offset int64, grew bool) {
+	offset = t.t.tail
+	blobLen := int64(len(key) + len(value))
+	grew = t.grow(offset + blobLen)
+	copy(t.bs[offset:], key)
+	copy(t.bs[offset+int64(len(key)):], value)
+	t.t.tail += blobLen
+	return
+}
 
-		return t.getNode(child, key, create)
-
-	case 0:
-		return nidx
+// seekBlock will return a Block matching the provided key. It create is set to true, a new Block will be created if no match is found
+func (t *Tree) seekBlock(startOffset int64, key []byte, create bool) (offset int64, grew bool) {
+	offset = -1
+	if startOffset == -1 {
+		return
 	}
 
+	block := t.getBlock(startOffset)
+	blockKey := t.getKey(block)
+
+	switch bytes.Compare(key, blockKey) {
+	case 1:
+		child := block.children[1]
+		if child == -1 {
+			if !create {
+				return
+			}
+
+			var nb *Block
+			if nb, offset, grew = t.newBlock(key); grew {
+				block = t.getBlock(startOffset)
+			}
+
+			nb.ct = childRight
+			nb.parent = startOffset
+			block.children[1] = offset
+			return
+		}
+
+		return t.seekBlock(child, key, create)
+
+	case -1:
+		child := block.children[0]
+		if child == -1 {
+			if !create {
+				return
+			}
+
+			var nb *Block
+			if nb, offset, grew = t.newBlock(key); grew {
+				block = t.getBlock(startOffset)
+			}
+
+			nb.ct = childLeft
+			nb.parent = startOffset
+			block.children[0] = offset
+			return
+		}
+
+		return t.seekBlock(child, key, create)
+
+	case 0:
+		offset = startOffset
+		return
+	}
+
+	return
+}
+
+func (t *Tree) grow(sz int64) (grew bool) {
+	for t.t.cap < sz {
+		t.t.cap *= 2
+		grew = true
+	}
+
+	if !grew {
+		return
+	}
+
+	journaler.Error("Growing!")
+	bs := make([]byte, t.t.cap)
+	copy(bs, t.bs)
+	t.bs = bs
+	t.setTrunk()
 	return
 }
 
 // getHead will get the very first item starting from a given node
 // Note: If called from root, will return the first item in the tree
-func (t *Tree) getHead(nidx int) (idx int) {
-	idx = -1
+func (t *Tree) getHead(startOffset int64) (offset int64) {
+	offset = -1
 
-	if nidx == -1 {
+	if startOffset == -1 {
 		return
 	}
 
-	for {
-		if child := t.nodes[nidx].children[0]; child != -1 {
-			nidx = child
-			continue
-		}
-
-		return nidx
+	b := t.getBlock(startOffset)
+	if child := b.children[0]; child != -1 {
+		return t.getHead(child)
 	}
+
+	return startOffset
 }
 
 // getTail will get the very last item starting from a given node
 // Note: If called from root, will return the last item in the tree
-func (t *Tree) getTail(nidx int) (idx int) {
-	idx = -1
+func (t *Tree) getTail(startOffset int64) (offset int64) {
+	offset = -1
 
-	if nidx == -1 {
+	if startOffset == -1 {
 		return
 	}
 
-	for {
-		if child := t.nodes[nidx].children[1]; child != -1 {
-			nidx = child
-			continue
-		}
-
-		return nidx
+	b := t.getBlock(startOffset)
+	if child := b.children[1]; child != -1 {
+		return t.getTail(child)
 	}
+
+	return startOffset
 }
 
-func (t *Tree) getUncle(nidx int) (idx int) {
-	idx = -1
-	parent := t.nodes[nidx].parent
-	grandparent := t.nodes[parent].parent
-
-	if grandparent == -1 {
+func (t *Tree) getUncle(startOffset int64) (offset int64) {
+	offset = -1
+	block := t.getBlock(startOffset)
+	parent := t.getBlock(block.parent)
+	if parent == nil {
 		return
 	}
 
-	switch t.nodes[parent].ct {
+	grandparent := t.getBlock(parent.parent)
+	if grandparent == nil {
+		return
+	}
+
+	switch parent.ct {
 	case childLeft:
-		return t.nodes[grandparent].children[1]
+		return grandparent.children[1]
 	case childRight:
-		return t.nodes[grandparent].children[0]
+		return grandparent.children[0]
 
 	}
 
 	return
 }
 
-func (t *Tree) setColor(nidx int, c color) {
-	t.nodes[nidx].c = c
-}
-
-func (t *Tree) setChildType(nidx int, ct childType) {
-	t.nodes[nidx].ct = ct
-}
-
-func (t *Tree) setParent(nidx, pidx int) {
-	t.nodes[nidx].parent = pidx
-}
-
-func (t *Tree) setParentChild(nidx, cidx int) {
-	switch t.nodes[nidx].ct {
+func (t *Tree) setParentChild(b, parent, child *Block) {
+	switch b.ct {
 	case childLeft:
-		t.nodes[t.getParent(nidx)].children[0] = cidx
+		parent.children[0] = child.offset
 	case childRight:
-		t.nodes[t.getParent(nidx)].children[1] = cidx
+		parent.children[1] = child.offset
 	case childRoot:
 		// No action is taken, tree will handle this at the end of put
 	}
 }
 
-func (t *Tree) getParent(nidx int) (idx int) {
-	return t.nodes[nidx].parent
-}
+func (t *Tree) balance(b *Block) {
+	parent := t.getBlock(b.parent)
+	uncle := t.getBlock(t.getUncle(b.offset))
 
-func (t *Tree) getGrandparent(nidx int) (idx int) {
-	return t.getParent(t.getParent(nidx))
-}
-
-func (t *Tree) balance(nidx int) {
 	switch {
-	case t.nodes[nidx].c == colorBlack:
+	case b.c == colorBlack:
 		return
-	case t.nodes[nidx].ct == childRoot:
-		if t.nodes[nidx].c == colorRed {
-			t.nodes[nidx].c = colorBlack
+	case b.ct == childRoot:
+		if b.c == colorRed {
+			b.c = colorBlack
 			return
 		}
 
-	case t.isRed(t.getUncle(nidx)):
-		t.setColor(t.nodes[nidx].parent, colorBlack)
-		t.setColor(t.getUncle(nidx), colorBlack)
-		grandparent := t.getGrandparent(nidx)
-		t.setColor(grandparent, colorRed)
+	case uncle != nil && uncle.c == colorRed:
+		parent.c = colorBlack
+		uncle.c = colorBlack
+
+		grandparent := t.getBlock(parent.parent)
+		grandparent.c = colorRed
 		// Balance grandparent
 		t.balance(grandparent)
 
-	case t.isRed(t.nodes[nidx].parent):
-		parent := t.nodes[nidx].parent
-		grandparent := t.getParent(parent)
+	case parent.c == colorRed:
+		grandparent := t.getBlock(parent.parent)
 
-		if t.isTriangle(nidx) {
-			t.rotateParent(nidx)
+		if t.isTriangle(b, parent) {
+			t.rotateParent(b)
 			// Balance parent
 			t.balance(parent)
 		} else {
 			// Is a line
-			t.rotateGrandparent(nidx)
+			t.rotateGrandparent(b)
 			// Balance grandparent
 			t.balance(grandparent)
 		}
 	}
 }
 
-func (t *Tree) leftRotate(nidx int) {
-	parent := t.nodes[nidx].parent
-	grandparent := t.getParent(parent)
+func (t *Tree) leftRotate(b *Block) {
+	parent := t.getBlock(b.parent)
+	grandparent := t.getBlock(parent.parent)
 
 	// Swap  children
-	swapChild := t.nodes[nidx].children[0]
-	t.nodes[parent].children[1] = swapChild
-	t.nodes[nidx].children[0] = parent
+	swapChild := t.getBlock(b.children[0])
+	b.children[0] = parent.offset
 
-	if swapChild != -1 {
-		t.setParent(swapChild, parent)
-		t.setChildType(swapChild, childRight)
+	if swapChild != nil {
+		parent.children[1] = swapChild.offset
+		swapChild.parent = parent.offset
+		swapChild.ct = childRight
+		// Set nidx as the child for our grandparent
+	} else {
+		parent.children[1] = -1
 	}
 
-	// Set nidx as the child for our grandparent
-	t.setParentChild(parent, nidx)
+	// Set block as the child for our grandparent
+	t.setParentChild(parent, grandparent, b)
+
 	// Set n's grandparent as parent
-	t.setParent(nidx, grandparent)
+	if grandparent == nil {
+		b.parent = -1
+	} else {
+		b.parent = grandparent.offset
+	}
 	// Set n as parent to the original parent
-	t.setParent(parent, nidx)
+	parent.parent = b.offset
 
 	// Set child types
-	t.setChildType(nidx, t.nodes[parent].ct)
-	t.setChildType(parent, childLeft)
+	b.ct = parent.ct
+	parent.ct = childLeft
 }
 
-func (t *Tree) rightRotate(nidx int) {
-	parent := t.nodes[nidx].parent
-	grandparent := t.getParent(parent)
+func (t *Tree) rightRotate(b *Block) {
+	parent := t.getBlock(b.parent)
+	grandparent := t.getBlock(parent.parent)
 
 	// Swap  children
-	swapChild := t.nodes[nidx].children[1]
-	t.nodes[parent].children[0] = swapChild
-	t.nodes[nidx].children[1] = parent
+	swapChild := t.getBlock(b.children[1])
+	b.children[1] = parent.offset
 
-	if swapChild != -1 {
-		t.setParent(swapChild, parent)
-		t.setChildType(swapChild, childLeft)
+	if swapChild != nil {
+		parent.children[0] = swapChild.offset
+		swapChild.parent = parent.offset
+		swapChild.ct = childLeft
+	} else {
+		parent.children[0] = -1
+		// Set nidx as the child for our grandparent
 	}
 
-	// Set nidx as the child for our grandparent
-	t.setParentChild(parent, nidx)
+	// Set block as the child for our grandparent
+	t.setParentChild(parent, grandparent, b)
+
 	// Set n's grandparent as parent
-	t.setParent(nidx, grandparent)
+	if grandparent == nil {
+		b.parent = -1
+	} else {
+		b.parent = grandparent.offset
+	}
 	// Set n as parent to the original parent
-	t.setParent(parent, nidx)
+	parent.parent = b.offset
 
 	// Set child types
-	t.setChildType(nidx, t.nodes[parent].ct)
-	t.setChildType(parent, childRight)
+	b.ct = parent.ct
+	parent.ct = childRight
 }
 
-func (t *Tree) rotateParent(nidx int) {
-	switch t.nodes[nidx].ct {
+func (t *Tree) rotateParent(b *Block) {
+	switch b.ct {
 	case childLeft:
-		t.rightRotate(nidx)
+		t.rightRotate(b)
 
 	case childRight:
-		t.leftRotate(nidx)
+		t.leftRotate(b)
 
 	default:
 		panic("invalid child type for parent rotation")
 	}
 }
 
-func (t *Tree) rotateGrandparent(nidx int) {
-	parent := t.getParent(nidx)
-	grandparent := t.getParent(parent)
+func (t *Tree) rotateGrandparent(b *Block) {
+	parent := t.getBlock(b.parent)
+	grandparent := t.getBlock(parent.parent)
 
-	switch t.nodes[parent].ct {
+	switch parent.ct {
 	case childLeft:
 		t.rightRotate(parent)
 
@@ -284,133 +383,149 @@ func (t *Tree) rotateGrandparent(nidx int) {
 		panic("invalid child type for grandparent rotation")
 	}
 
-	t.setColor(parent, colorBlack)
-	t.setColor(grandparent, colorRed)
+	parent.c = colorBlack
+	grandparent.c = colorRed
 }
 
-func (n *node) swapColor() {
-	if n.c == colorBlack {
-		n.c = colorRed
-	} else {
-		n.c = colorBlack
-	}
-}
-
-func (t *Tree) isRed(nidx int) (isRed bool) {
-	if nidx == -1 {
+func (t *Tree) isTriangle(b, parent *Block) (isTriangle bool) {
+	if b == nil {
 		return
 	}
 
-	return t.nodes[nidx].c == colorRed
-}
-
-func (t *Tree) isTriangle(nidx int) (isTriangle bool) {
-	if nidx == -1 {
-		return
-	}
-
-	parent := t.nodes[nidx].parent
-	if t.nodes[nidx].ct == childLeft && t.nodes[parent].ct == childRight {
+	if b.ct == childLeft && parent.ct == childRight {
 		return true
 	}
 
-	if t.nodes[nidx].ct == childRight && t.nodes[parent].ct == childLeft {
+	if b.ct == childRight && parent.ct == childLeft {
 		return true
 	}
 
 	return
 }
 
-func (t *Tree) numBlack(nidx int) (nb int) {
-	if nidx == -1 {
+func (t *Tree) numBlack(b *Block) (nb int) {
+	if b == nil {
 		return
 	}
 
-	if t.nodes[nidx].c == colorBlack {
+	if b.c == colorBlack {
 		nb = 1
 	}
 
-	if child := t.nodes[nidx].children[0]; child != -1 {
-		nb += t.numBlack(child)
+	if childOffset := b.children[0]; childOffset != -1 {
+		nb += t.numBlack(t.getBlock(childOffset))
 	}
 
-	if child := t.nodes[nidx].children[1]; child != -1 {
-		nb += t.numBlack(child)
+	if childOffset := b.children[1]; childOffset != -1 {
+		nb += t.numBlack(t.getBlock(childOffset))
 	}
 
 	return
 }
 
-func (t *Tree) iterate(nidx int, fn ForEachFn) (ended bool) {
-	if child := t.nodes[nidx].children[0]; child != -1 {
-		if ended = t.iterate(child, fn); ended {
+func (t *Tree) iterate(b *Block, fn ForEachFn) (ended bool) {
+	if child := b.children[0]; child != -1 {
+		if ended = t.iterate(t.getBlock(child), fn); ended {
 			return
 		}
 	}
 
-	if ended = fn(t.nodes[nidx].key, t.nodes[nidx].val); ended {
+	if ended = fn(t.getKey(b), t.getValue(b)); ended {
 		return
 	}
 
-	if child := t.nodes[nidx].children[1]; child != -1 {
-		if ended = t.iterate(child, fn); ended {
+	if child := b.children[1]; child != -1 {
+		if ended = t.iterate(t.getBlock(child), fn); ended {
 			return
 		}
 
 	}
 
 	return
+}
+
+func (t *Tree) getKey(b *Block) (key []byte) {
+	blobIndex := b.offset + blockSize
+	return t.bs[blobIndex : blobIndex+b.keyLen]
+}
+
+func (t *Tree) getValue(b *Block) (value []byte) {
+	blobIndex := b.offset + blockSize
+	valueIndex := blobIndex + b.keyLen
+	return t.bs[valueIndex : valueIndex+b.valLen]
 }
 
 // Get will retrieve an item from a tree
 func (t *Tree) Get(key []byte) (val []byte) {
-	if nidx := t.getNode(t.root, key, false); nidx != -1 {
+	if offset, _ := t.seekBlock(t.t.root, key, false); offset != -1 {
 		// Node was found, set value as the node's value
-		val = t.nodes[nidx].val
+		val = t.getValue(t.getBlock(offset))
 	}
 
+	return
+}
+
+func (t *Tree) setBlob(b *Block, key, value []byte) (grew bool) {
+	valLen := int64(len(value))
+	if valLen == b.valLen {
+		blobIndex := b.offset + blockSize
+		valueIndex := blobIndex + b.keyLen
+		copy(t.bs[valueIndex:], value)
+		return
+	}
+
+	b.blobOffset, grew = t.newBlob(key, value)
+	b.valLen = valLen
 	return
 }
 
 // Put will insert an item into the tree
 func (t *Tree) Put(key, val []byte) {
-	var nidx int
-	if t.root == -1 {
+	var (
+		b      *Block
+		grew   bool
+		offset int64
+	)
+
+	if t.t.root == -1 {
 		// Root doesn't exist, we can create one
-		tn := newNode(key)
-		nidx = len(t.nodes)
-		t.nodes = append(t.nodes, tn)
-		t.root = nidx
+		b, offset, _ = t.newBlock(key)
+		t.t.root = offset
 	} else {
 		// Find node whose key matches our provided key, if node does not exist - create it.
-		nidx = t.getNode(t.root, key, true)
+		offset, grew = t.seekBlock(t.t.root, key, true)
+		b = t.getBlock(offset)
 	}
 
-	t.nodes[nidx].val = val
+	if grew = t.setBlob(b, key, val); grew {
+		b = t.getBlock(offset)
+	}
+
 	// Balance tree after insert
 	// TODO: This can be moved into the node-creation portion
-	t.balance(nidx)
+	t.balance(b)
 
-	if t.nodes[t.root].ct != childRoot {
+	root := t.getBlock(t.t.root)
+	if root.ct != childRoot {
 		// Root has changed, update root reference to the new root
-		t.root = t.getParent(t.root)
+		t.t.root = root.parent
 	}
 
-	t.cnt++
+	t.t.cnt++
 }
 
 // ForEach will iterate through each tree item
 func (t *Tree) ForEach(fn ForEachFn) (ended bool) {
-	if t.root == -1 {
+	if t.t.root == -1 {
 		// Root doesn't exist, return early
 		return
 	}
 
 	// Call iterate from root
-	return t.iterate(t.root, fn)
+	return t.iterate(t.getBlock(t.t.root), fn)
 }
 
 // Len will return the length of the data-store
 func (t *Tree) Len() (n int) {
-	return int(t.cnt)
+	return int(t.t.cnt)
 }

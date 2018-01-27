@@ -23,16 +23,53 @@ var (
 	testVal []byte
 )
 
+/*
+func TestBasic(t *testing.T) {
+	tr := New(2, 2, 2)
+	journaler.Debug("Putting 1")
+	tr.Put([]byte("1"), []byte("1"))
+	journaler.Debug("Putting 2")
+	tr.Put([]byte("2"), []byte("2"))
+	journaler.Debug("Putting 3")
+	tr.Put([]byte("3"), []byte("3"))
+	journaler.Debug("Putting 4")
+	tr.Put([]byte("4"), []byte("4"))
+	journaler.Debug("Putting 5")
+	tr.Put([]byte("5"), []byte("5"))
+	journaler.Debug("Putting 6")
+	tr.Put([]byte("6"), []byte("6"))
+	journaler.Debug("Putting 7")
+	tr.Put([]byte("7"), []byte("7"))
+	journaler.Debug("Putting 8")
+	tr.Put([]byte("8"), []byte("8"))
+	journaler.Debug("Putting 9")
+	tr.Put([]byte("9"), []byte("9"))
+	journaler.Debug("Putting 10")
+	tr.Put([]byte("10"), []byte("10"))
+
+	journaler.Debug("Basic value: %v", string(tr.Get([]byte("1"))))
+	journaler.Debug("Basic value: %v", string(tr.Get([]byte("2"))))
+	journaler.Debug("Basic value: %v", string(tr.Get([]byte("3"))))
+	journaler.Debug("Basic value: %v", string(tr.Get([]byte("4"))))
+	journaler.Debug("Basic value: %v", string(tr.Get([]byte("5"))))
+	journaler.Debug("Basic value: %v", string(tr.Get([]byte("6"))))
+	journaler.Debug("Basic value: %v", string(tr.Get([]byte("7"))))
+	journaler.Debug("Basic value: %v", string(tr.Get([]byte("8"))))
+	journaler.Debug("Basic value: %v", string(tr.Get([]byte("9"))))
+	journaler.Debug("Basic value: %v", string(tr.Get([]byte("10"))))
+}
+*/
+
 func TestSortedPut(t *testing.T) {
-	testPut(t, getSorted(10000))
+	testPut(t, getSorted(10))
 }
 
 func TestReversePut(t *testing.T) {
-	testPut(t, getReverse(10000))
+	testPut(t, getReverse(10))
 }
 
 func TestRandomPut(t *testing.T) {
-	testPut(t, getRand(10000))
+	testPut(t, getRand(10))
 }
 
 func BenchmarkGet(b *testing.B) {
@@ -126,7 +163,7 @@ func BenchmarkSkiplistForEach(b *testing.B) {
 
 func testPut(t *testing.T, s []int) {
 	cnt := len(s)
-	tr := New(cnt)
+	tr := New(int64(cnt), 8, 8)
 	tm := make(map[string][]byte, cnt)
 
 	for _, v := range s {
@@ -159,7 +196,7 @@ func testPut(t *testing.T, s []int) {
 }
 
 func benchGet(b *testing.B, s []kv) {
-	tr := New(len(s))
+	tr := New(int64(len(s)), 8, 8)
 	for _, kv := range s {
 		tr.Put(kv.val, kv.val)
 	}
@@ -174,7 +211,7 @@ func benchGet(b *testing.B, s []kv) {
 
 func benchPut(b *testing.B, s []kv) {
 	b.ResetTimer()
-	tr := New(len(s))
+	tr := New(int64(len(s)), 8, 8)
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
@@ -185,7 +222,7 @@ func benchPut(b *testing.B, s []kv) {
 
 func benchGetPut(b *testing.B, s []kv) {
 	b.ResetTimer()
-	tr := New(len(s))
+	tr := New(int64(len(s)), 8, 8)
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
@@ -196,7 +233,8 @@ func benchGetPut(b *testing.B, s []kv) {
 }
 
 func benchForEach(b *testing.B, s []kv) {
-	tr := New(len(s))
+	tr := New(int64(len(s)), 8, 8)
+
 	for _, kv := range s {
 		tr.Put(kv.val, kv.val)
 	}
