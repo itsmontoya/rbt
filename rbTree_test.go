@@ -609,24 +609,30 @@ func benchCznicForEach(b *testing.B, s []kv) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		e, ok := tr.Seek([]byte("1"))
+		e, ok := tr.Seek([]byte(""))
 		if !ok {
 			b.Fatal("error calling iterator")
 		}
 
-		cnt := 0
-		for _, v, err := e.Next(); err != nil; _, v, err = e.Next() {
+		var (
+			v   interface{}
+			err error
+			cnt int
+		)
+
+		for _, v, err = e.Next(); err == nil; _, v, err = e.Next() {
 			testCznicVal = v
+			cnt++
 		}
 
 		if cnt != len(s) {
-			b.Fatalf("invalid count, expected %v and received %v", len(s), cnt)
+			b.Fatalf("invalid count, expected %v and received %v (%v)", len(s), cnt, err)
 		}
 	}
 }
 
 func getStrSlice(in []int) (out []kv) {
-	out = make([]kv, len(in))
+	out = make([]kv, 0, len(in))
 
 	for _, v := range in {
 		var kv kv
