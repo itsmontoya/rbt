@@ -2,8 +2,11 @@ package rbTree
 
 import (
 	"bytes"
+	"os"
+	"path"
 	"unsafe"
 
+	"github.com/edsrzf/mmap-go"
 	"github.com/missionMeteora/journaler"
 )
 
@@ -31,17 +34,84 @@ var (
 // Count is the initial backend entries capacity
 // keySize is the approximate key size (in bytes)
 // valSize is the approximate value size (in bytes)
-func New(cnt, keySize, valSize int64) *Tree {
-	var t Tree
-	sz := keySize + valSize + blockSize
-	sz *= cnt
-	sz += trunkSize
+func New(cnt, keySize, valSize int64) (t *Tree) {
+	sz := getSize(cnt, keySize, valSize)
+	t = newTree(sz, make([]byte, sz))
+	t.gfn = t.growByteslice
+	return
+}
 
-	t.bs = make([]byte, sz)
+// NewMMAP will return a new MMAP tree
+func NewMMAP(dir, name string, cnt, keySize, valSize int64) (t *Tree, err error) {
+	sz := getSize(cnt, keySize, valSize)
+
+	var f *os.File
+	if f, err = os.OpenFile(path.Join(dir, name), os.O_CREATE|os.O_RDWR, 0644); err != nil {
+		return
+	}
+
+	var fi os.FileInfo
+	if fi, err = f.Stat(); err != nil {
+		return
+	}
+
+	if fi.Size() == 0 {
+		if err = f.Truncate(sz); err != nil {
+			return
+		}
+	}
+
+	var mm mmap.MMap
+	if mm, err = mmap.Map(f, os.O_RDWR, 0); err != nil {
+		return
+	}
+
+	t = newTree(sz, mm)
+	t.gfn = func(sz int64) (bs []byte) {
+		for t.t.cap < sz {
+			t.t.cap *= 2
+		}
+		cap := t.t.cap
+
+		var err error
+		if err = mm.Unmap(); err != nil {
+			journaler.Error("Unmap error: %v", err)
+			return
+		}
+
+		if err = f.Truncate(cap); err != nil {
+			journaler.Error("Truncate error: %v", err)
+			return
+		}
+
+		if mm, err = mmap.Map(f, os.O_RDWR, 0); err != nil {
+			journaler.Error("Map error: %v", err)
+			return
+		}
+
+		return mm
+	}
+
+	t.cfn = func() {
+		mm.Flush()
+		mm.Unmap()
+		f.Close()
+	}
+
+	return
+}
+
+func newTree(sz int64, bs []byte) *Tree {
+	var t Tree
+	t.bs = bs
 	t.setTrunk()
-	t.t.root = -1
-	t.t.tail = trunkSize
-	t.t.cap = sz
+
+	if t.t.tail == 0 {
+		t.t.root = -1
+		t.t.tail = trunkSize
+		t.t.cap = sz
+	}
+
 	return &t
 }
 
@@ -49,6 +119,9 @@ func New(cnt, keySize, valSize int64) *Tree {
 type Tree struct {
 	bs []byte
 	t  *trunk
+
+	gfn GrowFn
+	cfn func()
 }
 
 type trunk struct {
@@ -56,6 +129,16 @@ type trunk struct {
 	cnt  int64
 	tail int64
 	cap  int64
+}
+
+func (t *Tree) growByteslice(sz int64) (bs []byte) {
+	for t.t.cap < sz {
+		t.t.cap *= 2
+	}
+
+	bs = make([]byte, t.t.cap)
+	copy(bs, t.bs)
+	return
 }
 
 func (t *Tree) setTrunk() {
@@ -163,21 +246,13 @@ func (t *Tree) seekBlock(startOffset int64, key []byte, create bool) (offset int
 }
 
 func (t *Tree) grow(sz int64) (grew bool) {
-	for t.t.cap < sz {
-		t.t.cap *= 2
-		grew = true
-	}
-
-	if !grew {
+	if t.t.cap > sz {
 		return
 	}
 
-	journaler.Error("Growing!")
-	bs := make([]byte, t.t.cap)
-	copy(bs, t.bs)
-	t.bs = bs
+	t.bs = t.gfn(sz)
 	t.setTrunk()
-	return
+	return true
 }
 
 // getHead will get the very first item starting from a given node
@@ -528,4 +603,9 @@ func (t *Tree) ForEach(fn ForEachFn) (ended bool) {
 // Len will return the length of the data-store
 func (t *Tree) Len() (n int) {
 	return int(t.t.cnt)
+}
+
+// Close will close a tree
+func (t *Tree) Close() {
+	t.cfn()
 }

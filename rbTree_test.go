@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
+	"os"
 	"sort"
 	"strconv"
 	"testing"
@@ -23,42 +24,110 @@ var (
 	testVal []byte
 )
 
-/*
 func TestBasic(t *testing.T) {
-	tr := New(2, 2, 2)
-	journaler.Debug("Putting 1")
+	tr, err := NewMMAP("data", "mmap.db", 2, 2, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	tr.Put([]byte("1"), []byte("1"))
-	journaler.Debug("Putting 2")
 	tr.Put([]byte("2"), []byte("2"))
-	journaler.Debug("Putting 3")
 	tr.Put([]byte("3"), []byte("3"))
-	journaler.Debug("Putting 4")
 	tr.Put([]byte("4"), []byte("4"))
-	journaler.Debug("Putting 5")
 	tr.Put([]byte("5"), []byte("5"))
-	journaler.Debug("Putting 6")
 	tr.Put([]byte("6"), []byte("6"))
-	journaler.Debug("Putting 7")
 	tr.Put([]byte("7"), []byte("7"))
-	journaler.Debug("Putting 8")
 	tr.Put([]byte("8"), []byte("8"))
-	journaler.Debug("Putting 9")
 	tr.Put([]byte("9"), []byte("9"))
-	journaler.Debug("Putting 10")
 	tr.Put([]byte("10"), []byte("10"))
 
-	journaler.Debug("Basic value: %v", string(tr.Get([]byte("1"))))
-	journaler.Debug("Basic value: %v", string(tr.Get([]byte("2"))))
-	journaler.Debug("Basic value: %v", string(tr.Get([]byte("3"))))
-	journaler.Debug("Basic value: %v", string(tr.Get([]byte("4"))))
-	journaler.Debug("Basic value: %v", string(tr.Get([]byte("5"))))
-	journaler.Debug("Basic value: %v", string(tr.Get([]byte("6"))))
-	journaler.Debug("Basic value: %v", string(tr.Get([]byte("7"))))
-	journaler.Debug("Basic value: %v", string(tr.Get([]byte("8"))))
-	journaler.Debug("Basic value: %v", string(tr.Get([]byte("9"))))
-	journaler.Debug("Basic value: %v", string(tr.Get([]byte("10"))))
+	if val := string(tr.Get([]byte("1"))); val != "1" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("2"))); val != "2" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("3"))); val != "3" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("4"))); val != "4" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("5"))); val != "5" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("6"))); val != "6" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("7"))); val != "7" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("8"))); val != "8" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("9"))); val != "9" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("10"))); val != "10" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	tr.Close()
+
+	if tr, err = NewMMAP("data", "mmap.db", 2, 2, 2); err != nil {
+		t.Fatal(err)
+	}
+
+	if val := string(tr.Get([]byte("1"))); val != "1" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("2"))); val != "2" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("3"))); val != "3" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("4"))); val != "4" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("5"))); val != "5" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("6"))); val != "6" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("7"))); val != "7" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("8"))); val != "8" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("9"))); val != "9" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
+	if val := string(tr.Get([]byte("10"))); val != "10" {
+		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)
+	}
+
 }
-*/
 
 func TestSortedPut(t *testing.T) {
 	testPut(t, getSorted(10))
@@ -72,33 +141,63 @@ func TestRandomPut(t *testing.T) {
 	testPut(t, getRand(10))
 }
 
-func BenchmarkGet(b *testing.B) {
+func BenchmarkRBTGet(b *testing.B) {
 	benchGet(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkSortedGetPut(b *testing.B) {
+func BenchmarkRBTSortedGetPut(b *testing.B) {
 	benchGetPut(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkSortedPut(b *testing.B) {
+func BenchmarkRBTSortedPut(b *testing.B) {
 	benchPut(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkReversePut(b *testing.B) {
+func BenchmarkRBTReversePut(b *testing.B) {
 	benchPut(b, testReverseListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkRandomPut(b *testing.B) {
+func BenchmarkRBTRandomPut(b *testing.B) {
 	benchPut(b, testRandomListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkForEach(b *testing.B) {
+func BenchmarkRBTForEach(b *testing.B) {
 	benchForEach(b, testSortedListStr)
+	b.ReportAllocs()
+}
+
+func BenchmarkRBTMMapGet(b *testing.B) {
+	benchMMAPGet(b, testSortedListStr)
+	b.ReportAllocs()
+}
+
+func BenchmarkRBTMMapSortedGetPut(b *testing.B) {
+	benchMMAPGetPut(b, testSortedListStr)
+	b.ReportAllocs()
+}
+
+func BenchmarkRBTMMapSortedPut(b *testing.B) {
+	benchMMAPPut(b, testSortedListStr)
+	b.ReportAllocs()
+}
+
+func BenchmarkRBTMMapReversePut(b *testing.B) {
+	benchMMAPPut(b, testReverseListStr)
+	b.ReportAllocs()
+}
+
+func BenchmarkRBTMMapRandomPut(b *testing.B) {
+	benchMMAPPut(b, testRandomListStr)
+	b.ReportAllocs()
+}
+
+func BenchmarkRBTMMapForEach(b *testing.B) {
+	benchMMAPForEach(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
@@ -210,8 +309,8 @@ func benchGet(b *testing.B, s []kv) {
 }
 
 func benchPut(b *testing.B, s []kv) {
-	b.ResetTimer()
 	tr := New(int64(len(s)), 8, 8)
+	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
@@ -221,8 +320,8 @@ func benchPut(b *testing.B, s []kv) {
 }
 
 func benchGetPut(b *testing.B, s []kv) {
-	b.ResetTimer()
 	tr := New(int64(len(s)), 8, 8)
+	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
@@ -234,6 +333,76 @@ func benchGetPut(b *testing.B, s []kv) {
 
 func benchForEach(b *testing.B, s []kv) {
 	tr := New(int64(len(s)), 8, 8)
+
+	for _, kv := range s {
+		tr.Put(kv.val, kv.val)
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		tr.ForEach(func(_, val []byte) (end bool) {
+			testVal = val
+			return
+		})
+	}
+}
+
+func benchMMAPGet(b *testing.B, s []kv) {
+	tr, err := NewMMAP("data", "test.db", int64(len(s)), 8, 8)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.Remove("/data/test.db")
+
+	for _, kv := range s {
+		tr.Put(kv.val, kv.val)
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, kv := range s {
+			testVal = tr.Get(kv.val)
+		}
+	}
+}
+
+func benchMMAPPut(b *testing.B, s []kv) {
+	tr, err := NewMMAP("data", "test.db", int64(len(s)), 8, 8)
+	if err != nil {
+		b.Fatal(err)
+	}
+	//	defer os.Remove("/data/test.db")
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, kv := range s {
+			tr.Put(kv.val, kv.val)
+		}
+	}
+}
+
+func benchMMAPGetPut(b *testing.B, s []kv) {
+	tr, err := NewMMAP("data", "test.db", int64(len(s)), 8, 8)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.Remove("/data/test.db")
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, kv := range s {
+			tr.Put(kv.val, kv.val)
+			testVal = tr.Get(kv.val)
+		}
+	}
+}
+
+func benchMMAPForEach(b *testing.B, s []kv) {
+	tr, err := NewMMAP("data", "test.db", int64(len(s)), 8, 8)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer os.Remove("/data/test.db")
 
 	for _, kv := range s {
 		tr.Put(kv.val, kv.val)
