@@ -1,0 +1,4 @@
+*.test
+*.pprof
+testing/profiling/profiling
+*.pdf

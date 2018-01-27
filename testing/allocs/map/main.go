@@ -18,11 +18,12 @@ func main() {
 	fmt.Println(end.Alloc - start.Alloc)
 }
 
-func populateN(n int) (m map[string]interface{}) {
-	m = make(map[string]interface{}, n)
+func populateN(n int) (m map[string][]byte) {
+	m = make(map[string][]byte, n)
 
 	for i := 0; i < n; i++ {
-		m[strconv.Itoa(i)] = i
+		key := strconv.Itoa(i)
+		m[key] = []byte(key)
 	}
 
 	return

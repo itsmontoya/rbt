@@ -21,10 +21,11 @@ func main() {
 }
 
 func populateN(n int) (t *rbTree.Tree) {
-	t = rbTree.New()
+	t = rbTree.New(n)
 
 	for i := 0; i < n; i++ {
-		t.Put(strconv.Itoa(i), i)
+		key := strconv.Itoa(i)
+		t.Put(key, []byte(key))
 	}
 
 	return
