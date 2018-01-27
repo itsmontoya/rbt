@@ -28,9 +28,8 @@ var (
 // New will return a new Tree
 // sz is the size (in bytes) to initially allocate for this db
 func New(sz int64) (t *Tree) {
-	t = newTree(sz)
 	bs := NewBytes()
-	t.gfn = bs.grow
+	t = newTree(sz, bs.grow, nil)
 	return
 }
 
@@ -42,15 +41,15 @@ func NewMMAP(dir, name string, sz int64) (t *Tree, err error) {
 		return
 	}
 
-	t = newTree(sz)
-	t.gfn = mm.grow
-	t.cfn = mm.Close
+	t = newTree(sz, mm.grow, mm.Close)
 	return
 }
 
-func newTree(sz int64) *Tree {
+func newTree(sz int64, gfn GrowFn, cfn CloseFn) *Tree {
 	var t Tree
-	t.grow(sz)
+	t.gfn = gfn
+	t.cfn = cfn
+	t.bs = t.gfn(sz)
 	t.setTrunk()
 
 	if t.t.tail == 0 {
@@ -90,6 +89,7 @@ func (t *Tree) growByteslice(sz int64) (bs []byte) {
 
 func (t *Tree) setTrunk() {
 	t.t = (*trunk)(unsafe.Pointer(&t.bs[0]))
+	t.t.cap = int64(cap(t.bs))
 }
 
 func (t *Tree) getBlock(offset int64) (b *Block) {

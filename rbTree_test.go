@@ -25,7 +25,7 @@ var (
 )
 
 func TestBasic(t *testing.T) {
-	tr, err := NewMMAP("data", "mmap.db", 2, 2, 2)
+	tr, err := NewMMAP("data", "mmap.db", 64)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +83,7 @@ func TestBasic(t *testing.T) {
 
 	tr.Close()
 
-	if tr, err = NewMMAP("data", "mmap.db", 2, 2, 2); err != nil {
+	if tr, err = NewMMAP("data", "mmap.db", 64); err != nil {
 		t.Fatal(err)
 	}
 
@@ -262,7 +262,7 @@ func BenchmarkSkiplistForEach(b *testing.B) {
 
 func testPut(t *testing.T, s []int) {
 	cnt := len(s)
-	tr := New(int64(cnt), 8, 8)
+	tr := New(1024 * 1024)
 	tm := make(map[string][]byte, cnt)
 
 	for _, v := range s {
@@ -295,7 +295,7 @@ func testPut(t *testing.T, s []int) {
 }
 
 func benchGet(b *testing.B, s []kv) {
-	tr := New(int64(len(s)), 8, 8)
+	tr := New(1024)
 	for _, kv := range s {
 		tr.Put(kv.val, kv.val)
 	}
@@ -309,7 +309,7 @@ func benchGet(b *testing.B, s []kv) {
 }
 
 func benchPut(b *testing.B, s []kv) {
-	tr := New(int64(len(s)), 8, 8)
+	tr := New(1024 * 1024)
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -320,7 +320,7 @@ func benchPut(b *testing.B, s []kv) {
 }
 
 func benchGetPut(b *testing.B, s []kv) {
-	tr := New(int64(len(s)), 8, 8)
+	tr := New(1024 * 1024)
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -332,7 +332,7 @@ func benchGetPut(b *testing.B, s []kv) {
 }
 
 func benchForEach(b *testing.B, s []kv) {
-	tr := New(int64(len(s)), 8, 8)
+	tr := New(1024 * 1024)
 
 	for _, kv := range s {
 		tr.Put(kv.val, kv.val)
@@ -348,7 +348,7 @@ func benchForEach(b *testing.B, s []kv) {
 }
 
 func benchMMAPGet(b *testing.B, s []kv) {
-	tr, err := NewMMAP("data", "test.db", int64(len(s)), 8, 8)
+	tr, err := NewMMAP("data", "test.db", 1024*1024)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -367,7 +367,7 @@ func benchMMAPGet(b *testing.B, s []kv) {
 }
 
 func benchMMAPPut(b *testing.B, s []kv) {
-	tr, err := NewMMAP("data", "test.db", int64(len(s)), 8, 8)
+	tr, err := NewMMAP("data", "test.db", 1024*1024)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -382,7 +382,7 @@ func benchMMAPPut(b *testing.B, s []kv) {
 }
 
 func benchMMAPGetPut(b *testing.B, s []kv) {
-	tr, err := NewMMAP("data", "test.db", int64(len(s)), 8, 8)
+	tr, err := NewMMAP("data", "test.db", 1024*1024)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -398,7 +398,7 @@ func benchMMAPGetPut(b *testing.B, s []kv) {
 }
 
 func benchMMAPForEach(b *testing.B, s []kv) {
-	tr, err := NewMMAP("data", "test.db", int64(len(s)), 8, 8)
+	tr, err := NewMMAP("data", "test.db", 1024*1024)
 	if err != nil {
 		b.Fatal(err)
 	}

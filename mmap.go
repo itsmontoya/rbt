@@ -44,7 +44,9 @@ func (m *MMap) grow(sz int64) (bs []byte) {
 			return
 		}
 
-		m.cap = fi.Size()
+		if m.cap = fi.Size(); m.cap == 0 {
+			m.cap = sz
+		}
 	}
 
 	for m.cap < sz {

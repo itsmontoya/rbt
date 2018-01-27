@@ -1,9 +1,5 @@
 package rbTree
 
-import (
-	"github.com/missionMeteora/journaler"
-)
-
 // NewBytes will return a new byteslice backend
 func NewBytes() *Bytes {
 	var b Bytes
@@ -15,12 +11,16 @@ type Bytes []byte
 
 func (b *Bytes) grow(sz int64) (bs []byte) {
 	cap := int64(cap(*b))
+	if cap == 0 {
+		cap = sz
+	}
+
 	for cap < sz {
 		cap *= 2
 	}
 
-	*b = make([]byte, cap)
-	bs = *b
-	journaler.Error("Grow")
+	bs = make([]byte, cap)
+	copy(bs, *b)
+	*b = bs
 	return
 }
