@@ -25,7 +25,11 @@ var (
 
 /*
 func TestBasic(t *testing.T) {
-	tr := New(2, 2, 2)
+	tr, err := NewMMAP("data", 24, 8, 8)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	journaler.Debug("Putting 1")
 	tr.Put([]byte("1"), []byte("1"))
 	journaler.Debug("Putting 2")
@@ -59,7 +63,6 @@ func TestBasic(t *testing.T) {
 	journaler.Debug("Basic value: %v", string(tr.Get([]byte("10"))))
 }
 */
-
 func TestSortedPut(t *testing.T) {
 	testPut(t, getSorted(10))
 }

@@ -3,8 +3,6 @@ package rbTree
 import (
 	"bytes"
 	"unsafe"
-
-	"github.com/missionMeteora/journaler"
 )
 
 const (
@@ -32,75 +30,57 @@ var (
 // keySize is the approximate key size (in bytes)
 // valSize is the approximate value size (in bytes)
 func New(cnt, keySize, valSize int64) *Tree {
-	var t Tree
+	sz := keySize + valSize + blockSize
+	sz *= cnt
+	sz += trunkSize
+	return newTree(NewBytes(sz))
+}
+
+/*
+// NewMMAP will return a new MMAP
+func NewMMAP(dir string, cnt, keySize, valSize int64) (t *Tree, err error) {
 	sz := keySize + valSize + blockSize
 	sz *= cnt
 	sz += trunkSize
 
-	t.bs = make([]byte, sz)
+	var f *os.File
+	if f, err = os.Create(path.Join(dir, "mmap.db")); err != nil {
+		return
+	}
+
+	f.Truncate(sz)
+
+	var mm mmap.MMap
+	if mm, err = mmap.Map(f, os.O_RDWR, 0); err != nil {
+		return
+	}
+
+	t = newTree(mm)
+	return
+}
+*/
+
+func newTree(be Backend) *Tree {
+	var t Tree
+	t.be = be
 	t.setTrunk()
 	t.t.root = -1
-	t.t.tail = trunkSize
-	t.t.cap = sz
 	return &t
 }
 
 // Tree is a red-black tree data structure
 type Tree struct {
-	bs []byte
+	be Backend
 	t  *trunk
 }
 
 type trunk struct {
 	root int64
 	cnt  int64
-	tail int64
-	cap  int64
 }
 
 func (t *Tree) setTrunk() {
-	t.t = (*trunk)(unsafe.Pointer(&t.bs[0]))
-}
-
-func (t *Tree) getBlock(offset int64) (b *Block) {
-	if offset == -1 {
-		return
-	}
-
-	return (*Block)(unsafe.Pointer(&t.bs[offset]))
-}
-
-func (t *Tree) newBlock(key []byte) (b *Block, offset int64, grew bool) {
-	offset = t.t.tail
-	grew = t.grow(offset + blockSize)
-
-	b = t.getBlock(offset)
-	t.t.tail += blockSize
-
-	// All new blocks start as red
-	b.c = colorRed
-	// Set offset and blob offset
-	b.offset = offset
-	b.blobOffset = -1
-	// Set parent and children to their zero values
-	b.parent = -1
-	b.children[0] = -1
-	b.children[1] = -1
-	// Set key length
-	b.keyLen = int64(len(key))
-	// Debug
-	b.derp = 67
-	return
-}
-
-func (t *Tree) newBlob(key, value []byte) (offset int64, grew bool) {
-	offset = t.t.tail
-	blobLen := int64(len(key) + len(value))
-	grew = t.grow(offset + blobLen)
-	copy(t.bs[offset:], key)
-	copy(t.bs[offset+int64(len(key)):], value)
-	t.t.tail += blobLen
-	return
+	t.t = t.be.getTrunk()
 }
 
 // seekBlock will return a Block matching the provided key. It create is set to true, a new Block will be created if no match is found
@@ -110,8 +90,8 @@ func (t *Tree) seekBlock(startOffset int64, key []byte, create bool) (offset int
 		return
 	}
 
-	block := t.getBlock(startOffset)
-	blockKey := t.getKey(block)
+	block := t.be.getBlock(startOffset)
+	blockKey := t.be.getKey(block)
 
 	switch bytes.Compare(key, blockKey) {
 	case 1:
@@ -122,8 +102,8 @@ func (t *Tree) seekBlock(startOffset int64, key []byte, create bool) (offset int
 			}
 
 			var nb *Block
-			if nb, offset, grew = t.newBlock(key); grew {
-				block = t.getBlock(startOffset)
+			if nb, offset, grew = t.be.newBlock(key); grew {
+				block = t.be.getBlock(startOffset)
 			}
 
 			nb.ct = childRight
@@ -142,8 +122,8 @@ func (t *Tree) seekBlock(startOffset int64, key []byte, create bool) (offset int
 			}
 
 			var nb *Block
-			if nb, offset, grew = t.newBlock(key); grew {
-				block = t.getBlock(startOffset)
+			if nb, offset, grew = t.be.newBlock(key); grew {
+				block = t.be.getBlock(startOffset)
 			}
 
 			nb.ct = childLeft
@@ -163,19 +143,10 @@ func (t *Tree) seekBlock(startOffset int64, key []byte, create bool) (offset int
 }
 
 func (t *Tree) grow(sz int64) (grew bool) {
-	for t.t.cap < sz {
-		t.t.cap *= 2
-		grew = true
-	}
-
-	if !grew {
+	if grew = t.be.grow(sz); !grew {
 		return
 	}
 
-	journaler.Error("Growing!")
-	bs := make([]byte, t.t.cap)
-	copy(bs, t.bs)
-	t.bs = bs
 	t.setTrunk()
 	return
 }
@@ -189,7 +160,7 @@ func (t *Tree) getHead(startOffset int64) (offset int64) {
 		return
 	}
 
-	b := t.getBlock(startOffset)
+	b := t.be.getBlock(startOffset)
 	if child := b.children[0]; child != -1 {
 		return t.getHead(child)
 	}
@@ -206,7 +177,7 @@ func (t *Tree) getTail(startOffset int64) (offset int64) {
 		return
 	}
 
-	b := t.getBlock(startOffset)
+	b := t.be.getBlock(startOffset)
 	if child := b.children[1]; child != -1 {
 		return t.getTail(child)
 	}
@@ -216,13 +187,13 @@ func (t *Tree) getTail(startOffset int64) (offset int64) {
 
 func (t *Tree) getUncle(startOffset int64) (offset int64) {
 	offset = -1
-	block := t.getBlock(startOffset)
-	parent := t.getBlock(block.parent)
+	block := t.be.getBlock(startOffset)
+	parent := t.be.getBlock(block.parent)
 	if parent == nil {
 		return
 	}
 
-	grandparent := t.getBlock(parent.parent)
+	grandparent := t.be.getBlock(parent.parent)
 	if grandparent == nil {
 		return
 	}
@@ -250,8 +221,8 @@ func (t *Tree) setParentChild(b, parent, child *Block) {
 }
 
 func (t *Tree) balance(b *Block) {
-	parent := t.getBlock(b.parent)
-	uncle := t.getBlock(t.getUncle(b.offset))
+	parent := t.be.getBlock(b.parent)
+	uncle := t.be.getBlock(t.getUncle(b.offset))
 
 	switch {
 	case b.c == colorBlack:
@@ -266,13 +237,13 @@ func (t *Tree) balance(b *Block) {
 		parent.c = colorBlack
 		uncle.c = colorBlack
 
-		grandparent := t.getBlock(parent.parent)
+		grandparent := t.be.getBlock(parent.parent)
 		grandparent.c = colorRed
 		// Balance grandparent
 		t.balance(grandparent)
 
 	case parent.c == colorRed:
-		grandparent := t.getBlock(parent.parent)
+		grandparent := t.be.getBlock(parent.parent)
 
 		if t.isTriangle(b, parent) {
 			t.rotateParent(b)
@@ -288,11 +259,11 @@ func (t *Tree) balance(b *Block) {
 }
 
 func (t *Tree) leftRotate(b *Block) {
-	parent := t.getBlock(b.parent)
-	grandparent := t.getBlock(parent.parent)
+	parent := t.be.getBlock(b.parent)
+	grandparent := t.be.getBlock(parent.parent)
 
 	// Swap  children
-	swapChild := t.getBlock(b.children[0])
+	swapChild := t.be.getBlock(b.children[0])
 	b.children[0] = parent.offset
 
 	if swapChild != nil {
@@ -322,11 +293,11 @@ func (t *Tree) leftRotate(b *Block) {
 }
 
 func (t *Tree) rightRotate(b *Block) {
-	parent := t.getBlock(b.parent)
-	grandparent := t.getBlock(parent.parent)
+	parent := t.be.getBlock(b.parent)
+	grandparent := t.be.getBlock(parent.parent)
 
 	// Swap  children
-	swapChild := t.getBlock(b.children[1])
+	swapChild := t.be.getBlock(b.children[1])
 	b.children[1] = parent.offset
 
 	if swapChild != nil {
@@ -369,8 +340,8 @@ func (t *Tree) rotateParent(b *Block) {
 }
 
 func (t *Tree) rotateGrandparent(b *Block) {
-	parent := t.getBlock(b.parent)
-	grandparent := t.getBlock(parent.parent)
+	parent := t.be.getBlock(b.parent)
+	grandparent := t.be.getBlock(parent.parent)
 
 	switch parent.ct {
 	case childLeft:
@@ -413,11 +384,11 @@ func (t *Tree) numBlack(b *Block) (nb int) {
 	}
 
 	if childOffset := b.children[0]; childOffset != -1 {
-		nb += t.numBlack(t.getBlock(childOffset))
+		nb += t.numBlack(t.be.getBlock(childOffset))
 	}
 
 	if childOffset := b.children[1]; childOffset != -1 {
-		nb += t.numBlack(t.getBlock(childOffset))
+		nb += t.numBlack(t.be.getBlock(childOffset))
 	}
 
 	return
@@ -425,57 +396,32 @@ func (t *Tree) numBlack(b *Block) (nb int) {
 
 func (t *Tree) iterate(b *Block, fn ForEachFn) (ended bool) {
 	if child := b.children[0]; child != -1 {
-		if ended = t.iterate(t.getBlock(child), fn); ended {
+		if ended = t.iterate(t.be.getBlock(child), fn); ended {
 			return
 		}
 	}
 
-	if ended = fn(t.getKey(b), t.getValue(b)); ended {
+	if ended = fn(t.be.getKey(b), t.be.getValue(b)); ended {
 		return
 	}
 
 	if child := b.children[1]; child != -1 {
-		if ended = t.iterate(t.getBlock(child), fn); ended {
+		if ended = t.iterate(t.be.getBlock(child), fn); ended {
 			return
 		}
 
 	}
 
 	return
-}
-
-func (t *Tree) getKey(b *Block) (key []byte) {
-	blobIndex := b.offset + blockSize
-	return t.bs[blobIndex : blobIndex+b.keyLen]
-}
-
-func (t *Tree) getValue(b *Block) (value []byte) {
-	blobIndex := b.offset + blockSize
-	valueIndex := blobIndex + b.keyLen
-	return t.bs[valueIndex : valueIndex+b.valLen]
 }
 
 // Get will retrieve an item from a tree
 func (t *Tree) Get(key []byte) (val []byte) {
 	if offset, _ := t.seekBlock(t.t.root, key, false); offset != -1 {
 		// Node was found, set value as the node's value
-		val = t.getValue(t.getBlock(offset))
+		val = t.be.getValue(t.be.getBlock(offset))
 	}
 
-	return
-}
-
-func (t *Tree) setBlob(b *Block, key, value []byte) (grew bool) {
-	valLen := int64(len(value))
-	if valLen == b.valLen {
-		blobIndex := b.offset + blockSize
-		valueIndex := blobIndex + b.keyLen
-		copy(t.bs[valueIndex:], value)
-		return
-	}
-
-	b.blobOffset, grew = t.newBlob(key, value)
-	b.valLen = valLen
 	return
 }
 
@@ -489,23 +435,23 @@ func (t *Tree) Put(key, val []byte) {
 
 	if t.t.root == -1 {
 		// Root doesn't exist, we can create one
-		b, offset, _ = t.newBlock(key)
+		b, offset, _ = t.be.newBlock(key)
 		t.t.root = offset
 	} else {
 		// Find node whose key matches our provided key, if node does not exist - create it.
 		offset, grew = t.seekBlock(t.t.root, key, true)
-		b = t.getBlock(offset)
+		b = t.be.getBlock(offset)
 	}
 
-	if grew = t.setBlob(b, key, val); grew {
-		b = t.getBlock(offset)
+	if grew = t.be.setBlob(b, key, val); grew {
+		b = t.be.getBlock(offset)
 	}
 
 	// Balance tree after insert
 	// TODO: This can be moved into the node-creation portion
 	t.balance(b)
 
-	root := t.getBlock(t.t.root)
+	root := t.be.getBlock(t.t.root)
 	if root.ct != childRoot {
 		// Root has changed, update root reference to the new root
 		t.t.root = root.parent
@@ -522,7 +468,7 @@ func (t *Tree) ForEach(fn ForEachFn) (ended bool) {
 	}
 
 	// Call iterate from root
-	return t.iterate(t.getBlock(t.t.root), fn)
+	return t.iterate(t.be.getBlock(t.t.root), fn)
 }
 
 // Len will return the length of the data-store
