@@ -31,7 +31,7 @@ var (
 )
 
 // New will return a new Tree
-// Count is the initial backend entries capacity
+// cnt is the initial backend entries capacity
 // keySize is the approximate key size (in bytes)
 // valSize is the approximate value size (in bytes)
 func New(cnt, keySize, valSize int64) (t *Tree) {
