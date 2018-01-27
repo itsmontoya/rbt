@@ -2,3 +2,4 @@
 *.pprof
 testing/profiling/profiling
 *.pdf
+*.db
