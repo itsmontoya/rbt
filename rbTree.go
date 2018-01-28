@@ -33,7 +33,7 @@ func New(sz int64) (t *Tree) {
 	return
 }
 
-// NewMMAP will return a new MMAP tree
+// NewMMAP will return a new MMAP Tree
 // sz is the size (in bytes) to initially allocate for this db
 func NewMMAP(dir, name string, sz int64) (t *Tree, err error) {
 	var mm *MMap
@@ -45,14 +45,19 @@ func NewMMAP(dir, name string, sz int64) (t *Tree, err error) {
 	return
 }
 
+// newTree will return a new Tree with the provided size, grow func, and close func
+// sz is the size (in bytes) to initially allocate for this db
+// gfn is the function to call on grows
+// cfn is the function to call on close (optional)
 func newTree(sz int64, gfn GrowFn, cfn CloseFn) *Tree {
 	var t Tree
 	t.gfn = gfn
 	t.cfn = cfn
 	t.bs = t.gfn(sz)
 	t.setTrunk()
-
+	// Check if trunk has been initialized
 	if t.t.tail == 0 {
+		// trunk has not been set, set inital values
 		t.t.root = -1
 		t.t.tail = trunkSize
 		t.t.cap = sz
@@ -67,29 +72,65 @@ type Tree struct {
 	t  *trunk
 
 	gfn GrowFn
-	cfn func() error
+	cfn CloseFn
 }
 
-type trunk struct {
-	root int64
-	cnt  int64
-	tail int64
-	cap  int64
-}
+// getHead will get the very first item starting from a given node
+// Note: If called from root, will return the first item in the tree
+func (t *Tree) getHead(startOffset int64) (offset int64) {
+	offset = -1
 
-func (t *Tree) growByteslice(sz int64) (bs []byte) {
-	for t.t.cap < sz {
-		t.t.cap *= 2
+	if startOffset == -1 {
+		return
 	}
 
-	bs = make([]byte, t.t.cap)
-	copy(bs, t.bs)
-	return
+	b := t.getBlock(startOffset)
+	if child := b.children[0]; child != -1 {
+		return t.getHead(child)
+	}
+
+	return startOffset
 }
 
-func (t *Tree) setTrunk() {
-	t.t = (*trunk)(unsafe.Pointer(&t.bs[0]))
-	t.t.cap = int64(cap(t.bs))
+// getTail will get the very last item starting from a given node
+// Note: If called from root, will return the last item in the tree
+func (t *Tree) getTail(startOffset int64) (offset int64) {
+	offset = -1
+
+	if startOffset == -1 {
+		return
+	}
+
+	b := t.getBlock(startOffset)
+	if child := b.children[1]; child != -1 {
+		return t.getTail(child)
+	}
+
+	return startOffset
+}
+
+func (t *Tree) getUncle(startOffset int64) (offset int64) {
+	offset = -1
+	block := t.getBlock(startOffset)
+	parent := t.getBlock(block.parent)
+	if parent == nil {
+		return
+	}
+
+	grandparent := t.getBlock(parent.parent)
+	if grandparent == nil {
+		return
+	}
+
+	switch parent.ct {
+	case childLeft:
+		return grandparent.children[1]
+	case childRight:
+		return grandparent.children[0]
+
+	}
+
+	return
 }
 
 func (t *Tree) getBlock(offset int64) (b *Block) {
@@ -98,6 +139,47 @@ func (t *Tree) getBlock(offset int64) (b *Block) {
 	}
 
 	return (*Block)(unsafe.Pointer(&t.bs[offset]))
+}
+
+func (t *Tree) getKey(b *Block) (key []byte) {
+	blobIndex := b.offset + blockSize
+	return t.bs[blobIndex : blobIndex+b.keyLen]
+}
+
+func (t *Tree) getValue(b *Block) (value []byte) {
+	blobIndex := b.offset + blockSize
+	valueIndex := blobIndex + b.keyLen
+	return t.bs[valueIndex : valueIndex+b.valLen]
+}
+
+func (t *Tree) setTrunk() {
+	t.t = (*trunk)(unsafe.Pointer(&t.bs[0]))
+	t.t.cap = int64(cap(t.bs))
+}
+
+func (t *Tree) setParentChild(b, parent, child *Block) {
+	switch b.ct {
+	case childLeft:
+		parent.children[0] = child.offset
+	case childRight:
+		parent.children[1] = child.offset
+	case childRoot:
+		// No action is taken, tree will handle this at the end of put
+	}
+}
+
+func (t *Tree) setBlob(b *Block, key, value []byte) (grew bool) {
+	valLen := int64(len(value))
+	if valLen == b.valLen {
+		blobIndex := b.offset + blockSize
+		valueIndex := blobIndex + b.keyLen
+		copy(t.bs[valueIndex:], value)
+		return
+	}
+
+	b.blobOffset, grew = t.newBlob(key, value)
+	b.valLen = valLen
+	return
 }
 
 func (t *Tree) newBlock(key []byte) (b *Block, offset int64, grew bool) {
@@ -200,75 +282,6 @@ func (t *Tree) grow(sz int64) (grew bool) {
 	t.bs = t.gfn(sz)
 	t.setTrunk()
 	return true
-}
-
-// getHead will get the very first item starting from a given node
-// Note: If called from root, will return the first item in the tree
-func (t *Tree) getHead(startOffset int64) (offset int64) {
-	offset = -1
-
-	if startOffset == -1 {
-		return
-	}
-
-	b := t.getBlock(startOffset)
-	if child := b.children[0]; child != -1 {
-		return t.getHead(child)
-	}
-
-	return startOffset
-}
-
-// getTail will get the very last item starting from a given node
-// Note: If called from root, will return the last item in the tree
-func (t *Tree) getTail(startOffset int64) (offset int64) {
-	offset = -1
-
-	if startOffset == -1 {
-		return
-	}
-
-	b := t.getBlock(startOffset)
-	if child := b.children[1]; child != -1 {
-		return t.getTail(child)
-	}
-
-	return startOffset
-}
-
-func (t *Tree) getUncle(startOffset int64) (offset int64) {
-	offset = -1
-	block := t.getBlock(startOffset)
-	parent := t.getBlock(block.parent)
-	if parent == nil {
-		return
-	}
-
-	grandparent := t.getBlock(parent.parent)
-	if grandparent == nil {
-		return
-	}
-
-	switch parent.ct {
-	case childLeft:
-		return grandparent.children[1]
-	case childRight:
-		return grandparent.children[0]
-
-	}
-
-	return
-}
-
-func (t *Tree) setParentChild(b, parent, child *Block) {
-	switch b.ct {
-	case childLeft:
-		parent.children[0] = child.offset
-	case childRight:
-		parent.children[1] = child.offset
-	case childRoot:
-		// No action is taken, tree will handle this at the end of put
-	}
 }
 
 func (t *Tree) balance(b *Block) {
@@ -466,17 +479,6 @@ func (t *Tree) iterate(b *Block, fn ForEachFn) (ended bool) {
 	return
 }
 
-func (t *Tree) getKey(b *Block) (key []byte) {
-	blobIndex := b.offset + blockSize
-	return t.bs[blobIndex : blobIndex+b.keyLen]
-}
-
-func (t *Tree) getValue(b *Block) (value []byte) {
-	blobIndex := b.offset + blockSize
-	valueIndex := blobIndex + b.keyLen
-	return t.bs[valueIndex : valueIndex+b.valLen]
-}
-
 // Get will retrieve an item from a tree
 func (t *Tree) Get(key []byte) (val []byte) {
 	if offset, _ := t.seekBlock(t.t.root, key, false); offset != -1 {
@@ -484,20 +486,6 @@ func (t *Tree) Get(key []byte) (val []byte) {
 		val = t.getValue(t.getBlock(offset))
 	}
 
-	return
-}
-
-func (t *Tree) setBlob(b *Block, key, value []byte) (grew bool) {
-	valLen := int64(len(value))
-	if valLen == b.valLen {
-		blobIndex := b.offset + blockSize
-		valueIndex := blobIndex + b.keyLen
-		copy(t.bs[valueIndex:], value)
-		return
-	}
-
-	b.blobOffset, grew = t.newBlob(key, value)
-	b.valLen = valLen
 	return
 }
 
