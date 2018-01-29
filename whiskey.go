@@ -29,7 +29,7 @@ var (
 // sz is the size (in bytes) to initially allocate for this db
 func New(sz int64) (w *Whiskey) {
 	bs := newBytes()
-	w = newWhiskey(sz, bs.grow, nil)
+	w = NewRaw(sz, bs.grow, nil)
 	return
 }
 
@@ -41,15 +41,15 @@ func NewMMAP(dir, name string, sz int64) (w *Whiskey, err error) {
 		return
 	}
 
-	w = newWhiskey(sz, mm.grow, mm.Close)
+	w = NewRaw(sz, mm.grow, mm.Close)
 	return
 }
 
-// newWhiskey will return a new Whiskey with the provided size, grow func, and close func
+// NewRaw will return a new Whiskey with the provided size, grow func, and close func
 // sz is the size (in bytes) to initially allocate for this db
 // gfn is the function to call on grows
 // cfn is the function to call on close (optional)
-func newWhiskey(sz int64, gfn GrowFn, cfn CloseFn) *Whiskey {
+func NewRaw(sz int64, gfn GrowFn, cfn CloseFn) *Whiskey {
 	var w Whiskey
 	w.gfn = gfn
 	w.cfn = cfn
