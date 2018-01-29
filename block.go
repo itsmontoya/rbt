@@ -1,4 +1,4 @@
-package rbTree
+package whiskey
 
 func newBlock(key []byte) (b Block) {
 	// All new blocks start as red

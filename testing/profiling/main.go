@@ -9,14 +9,13 @@ import (
 
 	"github.com/missionMeteora/journaler"
 
-	"github.com/itsmontoya/rbTree"
 	"github.com/pkg/profile"
 )
 
 func main() {
 	list := getSorted(10000)
 	strs := getStrSlice(list)
-	tr := rbTree.New(10000)
+	tr := whiskey.New(10000)
 	runtime.GC()
 	time.Sleep(time.Second * 3)
 	journaler.Notification("Values initialized, test starting")
