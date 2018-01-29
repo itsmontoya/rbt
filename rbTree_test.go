@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/OneOfOne/skiplist"
+	cznic "github.com/cznic/b"
 )
 
 var (
@@ -21,11 +22,12 @@ var (
 	testReverseListStr = getStrSlice(testReverseList)
 	testRandomListStr  = getStrSlice(testRandomList)
 
-	testVal []byte
+	testVal      []byte
+	testCznicVal interface{}
 )
 
 func TestBasic(t *testing.T) {
-	tr, err := NewMMAP("data", "mmap.db", 2, 2, 2)
+	tr, err := NewMMAP("data", "mmap.db", 64)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +85,7 @@ func TestBasic(t *testing.T) {
 
 	tr.Close()
 
-	if tr, err = NewMMAP("data", "mmap.db", 2, 2, 2); err != nil {
+	if tr, err = NewMMAP("data", "mmap.db", 64); err != nil {
 		t.Fatal(err)
 	}
 
@@ -260,9 +262,39 @@ func BenchmarkSkiplistForEach(b *testing.B) {
 	b.ReportAllocs()
 }
 
+func BenchmarkCznicGet(b *testing.B) {
+	benchCznicGet(b, testSortedListStr)
+	b.ReportAllocs()
+}
+
+func BenchmarkCznicSortedGetPut(b *testing.B) {
+	benchCznicGetPut(b, testSortedListStr)
+	b.ReportAllocs()
+}
+
+func BenchmarkCznicSortedPut(b *testing.B) {
+	benchCznicPut(b, testSortedListStr)
+	b.ReportAllocs()
+}
+
+func BenchmarkCznicReversePut(b *testing.B) {
+	benchCznicPut(b, testReverseListStr)
+	b.ReportAllocs()
+}
+
+func BenchmarkCznicRandomPut(b *testing.B) {
+	benchCznicPut(b, testRandomListStr)
+	b.ReportAllocs()
+}
+
+func BenchmarkCznicForEach(b *testing.B) {
+	benchCznicForEach(b, testSortedListStr)
+	b.ReportAllocs()
+}
+
 func testPut(t *testing.T, s []int) {
 	cnt := len(s)
-	tr := New(int64(cnt), 8, 8)
+	tr := New(1024 * 1024)
 	tm := make(map[string][]byte, cnt)
 
 	for _, v := range s {
@@ -295,7 +327,7 @@ func testPut(t *testing.T, s []int) {
 }
 
 func benchGet(b *testing.B, s []kv) {
-	tr := New(int64(len(s)), 8, 8)
+	tr := New(1024 * 1024)
 	for _, kv := range s {
 		tr.Put(kv.val, kv.val)
 	}
@@ -309,7 +341,7 @@ func benchGet(b *testing.B, s []kv) {
 }
 
 func benchPut(b *testing.B, s []kv) {
-	tr := New(int64(len(s)), 8, 8)
+	tr := New(1024 * 1024)
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -320,7 +352,7 @@ func benchPut(b *testing.B, s []kv) {
 }
 
 func benchGetPut(b *testing.B, s []kv) {
-	tr := New(int64(len(s)), 8, 8)
+	tr := New(1024 * 1024)
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -332,7 +364,7 @@ func benchGetPut(b *testing.B, s []kv) {
 }
 
 func benchForEach(b *testing.B, s []kv) {
-	tr := New(int64(len(s)), 8, 8)
+	tr := New(1024 * 1024)
 
 	for _, kv := range s {
 		tr.Put(kv.val, kv.val)
@@ -348,7 +380,7 @@ func benchForEach(b *testing.B, s []kv) {
 }
 
 func benchMMAPGet(b *testing.B, s []kv) {
-	tr, err := NewMMAP("data", "test.db", int64(len(s)), 8, 8)
+	tr, err := NewMMAP("data", "test.db", 1024*1024)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -367,7 +399,7 @@ func benchMMAPGet(b *testing.B, s []kv) {
 }
 
 func benchMMAPPut(b *testing.B, s []kv) {
-	tr, err := NewMMAP("data", "test.db", int64(len(s)), 8, 8)
+	tr, err := NewMMAP("data", "test.db", 1024*1024)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -382,7 +414,7 @@ func benchMMAPPut(b *testing.B, s []kv) {
 }
 
 func benchMMAPGetPut(b *testing.B, s []kv) {
-	tr, err := NewMMAP("data", "test.db", int64(len(s)), 8, 8)
+	tr, err := NewMMAP("data", "test.db", 1024*1024)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -398,7 +430,7 @@ func benchMMAPGetPut(b *testing.B, s []kv) {
 }
 
 func benchMMAPForEach(b *testing.B, s []kv) {
-	tr, err := NewMMAP("data", "test.db", int64(len(s)), 8, 8)
+	tr, err := NewMMAP("data", "test.db", 1024*1024)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -519,8 +551,88 @@ func benchSkiplistForEach(b *testing.B, s []kv) {
 	}
 }
 
+func benchCznicGet(b *testing.B, s []kv) {
+	tr := cznic.TreeNew(byteLess)
+	for _, kv := range s {
+		tr.Put(kv.val, func(_ interface{}, exists bool) (interface{}, bool) {
+			return kv.val, true
+		})
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, kv := range s {
+			testCznicVal, _ = tr.Get(kv.val)
+		}
+	}
+}
+
+func byteLess(a, b interface{}) int {
+	return bytes.Compare(a.([]byte), b.([]byte))
+}
+
+func benchCznicPut(b *testing.B, s []kv) {
+	tr := cznic.TreeNew(byteLess)
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, kv := range s {
+			tr.Put(kv.val, func(_ interface{}, exists bool) (interface{}, bool) {
+				return kv.val, true
+			})
+		}
+	}
+}
+
+func benchCznicGetPut(b *testing.B, s []kv) {
+	tr := cznic.TreeNew(byteLess)
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, kv := range s {
+			tr.Put(kv.val, func(_ interface{}, exists bool) (interface{}, bool) {
+				return kv.val, true
+			})
+			testCznicVal, _ = tr.Get(kv.val)
+		}
+	}
+}
+
+func benchCznicForEach(b *testing.B, s []kv) {
+	tr := cznic.TreeNew(byteLess)
+
+	for _, kv := range s {
+		tr.Put(kv.val, func(_ interface{}, exists bool) (interface{}, bool) {
+			return kv.val, true
+		})
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		e, ok := tr.Seek([]byte(""))
+		if !ok {
+			b.Fatal("error calling iterator")
+		}
+
+		var (
+			v   interface{}
+			err error
+			cnt int
+		)
+
+		for _, v, err = e.Next(); err == nil; _, v, err = e.Next() {
+			testCznicVal = v
+			cnt++
+		}
+
+		if cnt != len(s) {
+			b.Fatalf("invalid count, expected %v and received %v (%v)", len(s), cnt, err)
+		}
+	}
+}
+
 func getStrSlice(in []int) (out []kv) {
-	out = make([]kv, len(in))
+	out = make([]kv, 0, len(in))
 
 	for _, v := range in {
 		var kv kv
