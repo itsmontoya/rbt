@@ -4,7 +4,7 @@ type color uint8
 
 type childType uint8
 
-type trunk struct {
+type label struct {
 	root int64
 	cnt  int64
 	tail int64
@@ -23,6 +23,6 @@ type CloseFn func() error
 func getSize(cnt, keySize, valSize int64) (sz int64) {
 	sz = keySize + valSize + blockSize
 	sz *= cnt
-	sz += trunkSize
+	sz += labelSize
 	return
 }
