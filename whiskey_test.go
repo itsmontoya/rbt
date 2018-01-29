@@ -1,4 +1,4 @@
-package rbTree
+package whiskey
 
 import (
 	"bytes"
@@ -143,62 +143,62 @@ func TestRandomPut(t *testing.T) {
 	testPut(t, getRand(10))
 }
 
-func BenchmarkRBTGet(b *testing.B) {
+func BenchmarkWhiskeyGet(b *testing.B) {
 	benchGet(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkRBTSortedGetPut(b *testing.B) {
+func BenchmarkWhiskeySortedGetPut(b *testing.B) {
 	benchGetPut(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkRBTSortedPut(b *testing.B) {
+func BenchmarkWhiskeySortedPut(b *testing.B) {
 	benchPut(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkRBTReversePut(b *testing.B) {
+func BenchmarkWhiskeyReversePut(b *testing.B) {
 	benchPut(b, testReverseListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkRBTRandomPut(b *testing.B) {
+func BenchmarkWhiskeyRandomPut(b *testing.B) {
 	benchPut(b, testRandomListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkRBTForEach(b *testing.B) {
+func BenchmarkWhiskeyForEach(b *testing.B) {
 	benchForEach(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkRBTMMapGet(b *testing.B) {
+func BenchmarkWhiskeyMMapGet(b *testing.B) {
 	benchMMAPGet(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkRBTMMapSortedGetPut(b *testing.B) {
+func BenchmarkWhiskeyMMapSortedGetPut(b *testing.B) {
 	benchMMAPGetPut(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkRBTMMapSortedPut(b *testing.B) {
+func BenchmarkWhiskeyMMapSortedPut(b *testing.B) {
 	benchMMAPPut(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkRBTMMapReversePut(b *testing.B) {
+func BenchmarkWhiskeyMMapReversePut(b *testing.B) {
 	benchMMAPPut(b, testReverseListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkRBTMMapRandomPut(b *testing.B) {
+func BenchmarkWhiskeyMMapRandomPut(b *testing.B) {
 	benchMMAPPut(b, testRandomListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkRBTMMapForEach(b *testing.B) {
+func BenchmarkWhiskeyMMapForEach(b *testing.B) {
 	benchMMAPForEach(b, testSortedListStr)
 	b.ReportAllocs()
 }

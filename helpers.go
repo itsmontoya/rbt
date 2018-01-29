@@ -1,4 +1,4 @@
-package rbTree
+package whiskey
 
 type color uint8
 
