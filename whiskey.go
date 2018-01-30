@@ -535,6 +535,12 @@ func (w *Whiskey) ForEach(fn ForEachFn) (ended bool) {
 	return w.iterate(w.getBlock(w.l.root), fn)
 }
 
+// Reset will clear the tree and keep the backend. Can be used as a fresh store
+func (w *Whiskey) Reset() {
+	w.l.tail = labelSize
+	w.l.root = -1
+}
+
 // Len will return the length of the data-store
 func (w *Whiskey) Len() (n int) {
 	return int(w.l.cnt)
