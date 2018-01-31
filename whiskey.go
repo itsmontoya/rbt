@@ -154,7 +154,7 @@ func (w *Whiskey) getValue(b *Block) (value []byte) {
 
 func (w *Whiskey) setLabel() {
 	w.l = (*label)(unsafe.Pointer(&w.bs[0]))
-	w.l.cap = int64(cap(w.bs))
+	w.l.cap = int64(len(w.bs))
 }
 
 func (w *Whiskey) setParentChild(b, parent, child *Block) {
