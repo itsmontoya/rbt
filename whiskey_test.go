@@ -3,29 +3,38 @@ package whiskey
 import (
 	"bytes"
 	"fmt"
-	"math/rand"
 	"os"
-	"sort"
 	"strconv"
 	"testing"
+
+	"github.com/itsmontoya/whiskey/testUtils"
+
+	"github.com/missionMeteora/journaler"
 
 	"github.com/OneOfOne/skiplist"
 	cznic "github.com/cznic/b"
 )
 
 var (
-	testSortedList  = getSorted(10000)
-	testReverseList = getReverse(10000)
-	testRandomList  = getRand(10000)
+	testSortedList  = testUtils.GetSorted(10000)
+	testReverseList = testUtils.GetReverse(10000)
+	testRandomList  = testUtils.GetRand(10000)
 
-	testSortedListStr  = getStrSlice(testSortedList)
-	testReverseListStr = getStrSlice(testReverseList)
-	testRandomListStr  = getStrSlice(testRandomList)
+	testSortedListStr  = testUtils.GetStrSlice(testSortedList)
+	testReverseListStr = testUtils.GetStrSlice(testReverseList)
+	testRandomListStr  = testUtils.GetStrSlice(testRandomList)
 
 	testVal      []byte
 	testCznicVal interface{}
 )
 
+func TestForEach(t *testing.T) {
+	w := New(1024)
+	w.ForEach(func(k, v []byte) (end bool) {
+		journaler.Debug("uh shit?")
+		return
+	})
+}
 func TestBasic(t *testing.T) {
 	tr, err := NewMMAP("data", "mmap.db", 64)
 	if err != nil {
@@ -132,15 +141,15 @@ func TestBasic(t *testing.T) {
 }
 
 func TestSortedPut(t *testing.T) {
-	testPut(t, getSorted(10))
+	testPut(t, testUtils.GetSorted(10))
 }
 
 func TestReversePut(t *testing.T) {
-	testPut(t, getReverse(10))
+	testPut(t, testUtils.GetReverse(10))
 }
 
 func TestRandomPut(t *testing.T) {
-	testPut(t, getRand(10))
+	testPut(t, testUtils.GetRand(10))
 }
 
 func BenchmarkWhiskeyGet(b *testing.B) {
@@ -326,48 +335,48 @@ func testPut(t *testing.T, s []int) {
 	}
 }
 
-func benchGet(b *testing.B, s []kv) {
+func benchGet(b *testing.B, s []testUtils.KV) {
 	tr := New(1024 * 1024)
 	for _, kv := range s {
-		tr.Put(kv.val, kv.val)
+		tr.Put(kv.Val, kv.Val)
 	}
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
-			testVal = tr.Get(kv.val)
+			testVal = tr.Get(kv.Val)
 		}
 	}
 }
 
-func benchPut(b *testing.B, s []kv) {
+func benchPut(b *testing.B, s []testUtils.KV) {
 	tr := New(1024 * 1024)
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
-			tr.Put(kv.val, kv.val)
+			tr.Put(kv.Val, kv.Val)
 		}
 	}
 }
 
-func benchGetPut(b *testing.B, s []kv) {
+func benchGetPut(b *testing.B, s []testUtils.KV) {
 	tr := New(1024 * 1024)
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
-			tr.Put(kv.val, kv.val)
-			testVal = tr.Get(kv.val)
+			tr.Put(kv.Val, kv.Val)
+			testVal = tr.Get(kv.Val)
 		}
 	}
 }
 
-func benchForEach(b *testing.B, s []kv) {
+func benchForEach(b *testing.B, s []testUtils.KV) {
 	tr := New(1024 * 1024)
 
 	for _, kv := range s {
-		tr.Put(kv.val, kv.val)
+		tr.Put(kv.Val, kv.Val)
 	}
 	b.ResetTimer()
 
@@ -379,7 +388,7 @@ func benchForEach(b *testing.B, s []kv) {
 	}
 }
 
-func benchMMAPGet(b *testing.B, s []kv) {
+func benchMMAPGet(b *testing.B, s []testUtils.KV) {
 	tr, err := NewMMAP("data", "test.db", 1024*1024)
 	if err != nil {
 		b.Fatal(err)
@@ -387,18 +396,18 @@ func benchMMAPGet(b *testing.B, s []kv) {
 	defer os.Remove("/data/test.db")
 
 	for _, kv := range s {
-		tr.Put(kv.val, kv.val)
+		tr.Put(kv.Val, kv.Val)
 	}
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
-			testVal = tr.Get(kv.val)
+			testVal = tr.Get(kv.Val)
 		}
 	}
 }
 
-func benchMMAPPut(b *testing.B, s []kv) {
+func benchMMAPPut(b *testing.B, s []testUtils.KV) {
 	tr, err := NewMMAP("data", "test.db", 1024*1024)
 	if err != nil {
 		b.Fatal(err)
@@ -408,12 +417,12 @@ func benchMMAPPut(b *testing.B, s []kv) {
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
-			tr.Put(kv.val, kv.val)
+			tr.Put(kv.Val, kv.Val)
 		}
 	}
 }
 
-func benchMMAPGetPut(b *testing.B, s []kv) {
+func benchMMAPGetPut(b *testing.B, s []testUtils.KV) {
 	tr, err := NewMMAP("data", "test.db", 1024*1024)
 	if err != nil {
 		b.Fatal(err)
@@ -423,13 +432,13 @@ func benchMMAPGetPut(b *testing.B, s []kv) {
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
-			tr.Put(kv.val, kv.val)
-			testVal = tr.Get(kv.val)
+			tr.Put(kv.Val, kv.Val)
+			testVal = tr.Get(kv.Val)
 		}
 	}
 }
 
-func benchMMAPForEach(b *testing.B, s []kv) {
+func benchMMAPForEach(b *testing.B, s []testUtils.KV) {
 	tr, err := NewMMAP("data", "test.db", 1024*1024)
 	if err != nil {
 		b.Fatal(err)
@@ -437,7 +446,7 @@ func benchMMAPForEach(b *testing.B, s []kv) {
 	defer os.Remove("/data/test.db")
 
 	for _, kv := range s {
-		tr.Put(kv.val, kv.val)
+		tr.Put(kv.Val, kv.Val)
 	}
 	b.ResetTimer()
 
@@ -449,47 +458,47 @@ func benchMMAPForEach(b *testing.B, s []kv) {
 	}
 }
 
-func benchMapGet(b *testing.B, s []kv) {
+func benchMapGet(b *testing.B, s []testUtils.KV) {
 	m := make(map[string][]byte)
 	for _, kv := range s {
-		m[kv.key] = kv.val
+		m[kv.Key] = kv.Val
 	}
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
-			testVal = m[kv.key]
+			testVal = m[kv.Key]
 		}
 	}
 }
 
-func benchMapPut(b *testing.B, s []kv) {
-	b.ResetTimer()
-	m := make(map[string][]byte)
-
-	for i := 0; i < b.N; i++ {
-		for _, kv := range s {
-			m[kv.key] = kv.val
-		}
-	}
-}
-
-func benchMapGetPut(b *testing.B, s []kv) {
+func benchMapPut(b *testing.B, s []testUtils.KV) {
 	b.ResetTimer()
 	m := make(map[string][]byte)
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
-			testVal = m[kv.key]
-			m[kv.key] = kv.val
+			m[kv.Key] = kv.Val
 		}
 	}
 }
 
-func benchMapForEach(b *testing.B, s []kv) {
+func benchMapGetPut(b *testing.B, s []testUtils.KV) {
+	b.ResetTimer()
+	m := make(map[string][]byte)
+
+	for i := 0; i < b.N; i++ {
+		for _, kv := range s {
+			testVal = m[kv.Key]
+			m[kv.Key] = kv.Val
+		}
+	}
+}
+
+func benchMapForEach(b *testing.B, s []testUtils.KV) {
 	m := make(map[string][]byte)
 	for _, kv := range s {
-		m[kv.key] = kv.val
+		m[kv.Key] = kv.Val
 	}
 	b.ResetTimer()
 
@@ -500,46 +509,46 @@ func benchMapForEach(b *testing.B, s []kv) {
 	}
 }
 
-func benchSkiplistGet(b *testing.B, s []kv) {
+func benchSkiplistGet(b *testing.B, s []testUtils.KV) {
 	sl := skiplist.New(32)
 	for _, kv := range s {
-		sl.Set(kv.key, kv.val)
+		sl.Set(kv.Key, kv.Val)
 	}
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
-			testVal = sl.Get(kv.key).([]byte)
+			testVal = sl.Get(kv.Key).([]byte)
 		}
 	}
 }
 
-func benchSkiplistPut(b *testing.B, s []kv) {
-	b.ResetTimer()
-	sl := skiplist.New(32)
-	for i := 0; i < b.N; i++ {
-		for _, kv := range s {
-			sl.Set(kv.key, kv.val)
-		}
-	}
-}
-
-func benchSkiplistGetPut(b *testing.B, s []kv) {
+func benchSkiplistPut(b *testing.B, s []testUtils.KV) {
 	b.ResetTimer()
 	sl := skiplist.New(32)
-
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
-			sl.Set(kv.key, kv.val)
-			testVal = sl.Get(kv.key).([]byte)
+			sl.Set(kv.Key, kv.Val)
 		}
 	}
 }
 
-func benchSkiplistForEach(b *testing.B, s []kv) {
+func benchSkiplistGetPut(b *testing.B, s []testUtils.KV) {
+	b.ResetTimer()
+	sl := skiplist.New(32)
+
+	for i := 0; i < b.N; i++ {
+		for _, kv := range s {
+			sl.Set(kv.Key, kv.Val)
+			testVal = sl.Get(kv.Key).([]byte)
+		}
+	}
+}
+
+func benchSkiplistForEach(b *testing.B, s []testUtils.KV) {
 	sl := skiplist.New(32)
 	for _, kv := range s {
-		sl.Set(kv.key, kv.val)
+		sl.Set(kv.Key, kv.Val)
 	}
 	b.ResetTimer()
 
@@ -551,18 +560,18 @@ func benchSkiplistForEach(b *testing.B, s []kv) {
 	}
 }
 
-func benchCznicGet(b *testing.B, s []kv) {
+func benchCznicGet(b *testing.B, s []testUtils.KV) {
 	tr := cznic.TreeNew(byteLess)
 	for _, kv := range s {
-		tr.Put(kv.val, func(_ interface{}, exists bool) (interface{}, bool) {
-			return kv.val, true
+		tr.Put(kv.Val, func(_ interface{}, exists bool) (interface{}, bool) {
+			return kv.Val, true
 		})
 	}
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
-			testCznicVal, _ = tr.Get(kv.val)
+			testCznicVal, _ = tr.Get(kv.Val)
 		}
 	}
 }
@@ -571,39 +580,39 @@ func byteLess(a, b interface{}) int {
 	return bytes.Compare(a.([]byte), b.([]byte))
 }
 
-func benchCznicPut(b *testing.B, s []kv) {
+func benchCznicPut(b *testing.B, s []testUtils.KV) {
 	tr := cznic.TreeNew(byteLess)
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
-			tr.Put(kv.val, func(_ interface{}, exists bool) (interface{}, bool) {
-				return kv.val, true
+			tr.Put(kv.Val, func(_ interface{}, exists bool) (interface{}, bool) {
+				return kv.Val, true
 			})
 		}
 	}
 }
 
-func benchCznicGetPut(b *testing.B, s []kv) {
+func benchCznicGetPut(b *testing.B, s []testUtils.KV) {
 	tr := cznic.TreeNew(byteLess)
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range s {
-			tr.Put(kv.val, func(_ interface{}, exists bool) (interface{}, bool) {
-				return kv.val, true
+			tr.Put(kv.Val, func(_ interface{}, exists bool) (interface{}, bool) {
+				return kv.Val, true
 			})
-			testCznicVal, _ = tr.Get(kv.val)
+			testCznicVal, _ = tr.Get(kv.Val)
 		}
 	}
 }
 
-func benchCznicForEach(b *testing.B, s []kv) {
+func benchCznicForEach(b *testing.B, s []testUtils.KV) {
 	tr := cznic.TreeNew(byteLess)
 
 	for _, kv := range s {
-		tr.Put(kv.val, func(_ interface{}, exists bool) (interface{}, bool) {
-			return kv.val, true
+		tr.Put(kv.Val, func(_ interface{}, exists bool) (interface{}, bool) {
+			return kv.Val, true
 		})
 	}
 	b.ResetTimer()
@@ -629,42 +638,4 @@ func benchCznicForEach(b *testing.B, s []kv) {
 			b.Fatalf("invalid count, expected %v and received %v (%v)", len(s), cnt, err)
 		}
 	}
-}
-
-func getStrSlice(in []int) (out []kv) {
-	out = make([]kv, 0, len(in))
-
-	for _, v := range in {
-		var kv kv
-		kv.key = strconv.Itoa(v)
-		kv.val = []byte(kv.key)
-		out = append(out, kv)
-	}
-
-	return
-}
-
-func getSorted(n int) (s []int) {
-	s = make([]int, n)
-
-	for i := 0; i < n; i++ {
-		s[i] = i
-	}
-
-	return
-}
-
-func getReverse(n int) (s []int) {
-	s = getSorted(n)
-	_ = sort.Reverse(sort.IntSlice(s))
-	return
-}
-
-func getRand(n int) (s []int) {
-	return rand.Perm(n)
-}
-
-type kv struct {
-	key string
-	val []byte
 }
