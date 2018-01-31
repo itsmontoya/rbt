@@ -3,7 +3,6 @@ package glass
 import (
 	"github.com/Path94/atoms"
 	"github.com/itsmontoya/whiskey"
-	"github.com/missionMeteora/journaler"
 	"github.com/missionMeteora/toolkit/errors"
 )
 
@@ -44,11 +43,6 @@ type Glass struct {
 	wtxn *Txn
 }
 
-func (g *Glass) writeEntry(key, val []byte) (end bool) {
-	g.w.Put(key, val)
-	return
-}
-
 // Read will return a read transaction
 func (g *Glass) Read(fn TxnFn) (err error) {
 	var txn Txn
@@ -69,15 +63,13 @@ func (g *Glass) Update(fn TxnFn) (err error) {
 	txn.r = g.w
 	txn.w = g.s
 
-	journaler.Debug("Update txn: %#v", txn)
-
 	g.mux.Update(func() {
 		defer g.s.Reset()
 		if err = fn(&txn); err != nil {
 			return
 		}
 
-		g.s.ForEach(g.writeEntry)
+		err = txn.flush()
 	})
 
 	txn.r = nil

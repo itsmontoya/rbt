@@ -27,16 +27,17 @@ func (t *Txn) setKeyBuffer(key []byte) {
 	t.kbuf = append(t.kbuf, key...)
 }
 
-func (t *Txn) getBucketBytes(key []byte) (bs []byte) {
+func (t *Txn) getBucketBytes(key []byte) (rbs, wbs []byte) {
 	t.setKeyBuffer(key)
-	if t.w != nil {
-		// This is a write transaction, let's check if this value has been changed
-		if bs = t.w.Get(t.kbuf); bs != nil {
-			return
-		}
+	if t.r != nil {
+		rbs = t.r.Get(t.kbuf)
 	}
 
-	bs = t.r.Get(t.kbuf)
+	if t.w != nil {
+		// This is a write transaction, let's check if this value has been changed
+		wbs = t.w.Get(t.kbuf)
+	}
+
 	return
 }
 
@@ -45,15 +46,25 @@ func (t *Txn) truncate(key []byte, sz int64) (bs []byte) {
 	return t.w.Get(key)
 }
 
+func (t *Txn) truncateRoot(key []byte, sz int64) (bs []byte) {
+	t.r.Put(key, make([]byte, sz))
+	return t.r.Get(key)
+}
+
 // Bucket will return a bucket for a provided key
 func (t *Txn) Bucket(key []byte) (bp *Bucket) {
 	t.setKeyBuffer(key)
-	bs := t.getBucketBytes(key)
-	if bs == nil {
+	rbs, wbs := t.getBucketBytes(t.kbuf)
+	if rbs == nil && wbs == nil {
 		return
 	}
 
-	return newBucket(t.kbuf, bs, t.truncate)
+	if wbs == nil && t.w != nil {
+		t.w.Put(t.kbuf, make([]byte, bucketInitSize))
+		wbs = t.w.Get(t.kbuf)
+	}
+
+	return newBucket(t.kbuf, rbs, wbs, t.truncate)
 }
 
 // CreateBucket will create a bucket for a provided key
@@ -64,8 +75,13 @@ func (t *Txn) CreateBucket(key []byte) (bp *Bucket, err error) {
 	}
 
 	t.setKeyBuffer(key)
-	bs := t.getBucketBytes(key)
-	bp = newBucket(t.kbuf, bs, t.truncate)
+	rbs, wbs := t.getBucketBytes(t.kbuf)
+	if rbs == nil && wbs == nil {
+		t.w.Put(t.kbuf, make([]byte, bucketInitSize))
+		wbs = t.w.Get(t.kbuf)
+	}
+
+	bp = newBucket(t.kbuf, rbs, wbs, t.truncate)
 	return
 }
 
@@ -81,7 +97,10 @@ func (t *Txn) Get(key []byte) (val []byte, err error) {
 		}
 	}
 
-	val = t.r.Get(key)
+	if t.r != nil {
+		val = t.r.Get(key)
+	}
+
 	return
 }
 
@@ -96,6 +115,34 @@ func (t *Txn) Put(key []byte, val []byte) (err error) {
 	}
 
 	t.w.Put(key, val)
+	return
+}
+
+func (t *Txn) writeEntry(key, val []byte) (end bool) {
+	if key[0] != bucketPrefix {
+		// Flush value to main branch
+		t.r.Put(key, val)
+		return
+	}
+
+	rbs := t.r.Get(key)
+	if rbs == nil {
+		t.r.Put(t.kbuf, make([]byte, bucketInitSize))
+		rbs = t.r.Get(key)
+
+	}
+
+	bkt := newBucket(key, rbs, val, t.truncate)
+	bkt.rgfn = t.truncateRoot
+	end = bkt.w.ForEach(func(key, val []byte) (end bool) {
+		return bkt.writeEntry(key, val)
+	})
+
+	return
+}
+
+func (t *Txn) flush() (err error) {
+	t.w.ForEach(t.writeEntry)
 	return
 }
 

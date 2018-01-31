@@ -4,7 +4,11 @@ import (
 	"github.com/itsmontoya/whiskey"
 )
 
-func newBucket(key, bs []byte, gfn func(key []byte, sz int64) []byte) *Bucket {
+const (
+	bucketInitSize = 256
+)
+
+func newBucket(key, rbs, wbs []byte, gfn GrowFn) *Bucket {
 	var b Bucket
 	// Because the provided key is a reference to the DB's key buffer, we will need to copy
 	// the contents into a new slice so that we don't encounter any race conditions later
@@ -14,28 +18,65 @@ func newBucket(key, bs []byte, gfn func(key []byte, sz int64) []byte) *Bucket {
 	// Copy key buffer to key
 	copy(b.key, key)
 
-	b.bs = bs
-	b.gfn = gfn
-	b.w = whiskey.NewRaw(256, b.grow, nil)
+	if rbs != nil {
+		b.rbs = rbs
+		b.r = whiskey.NewRaw(bucketInitSize, b.growSlave, nil)
+	}
+	// ITS SOMEWHERE HERE
+	if wbs != nil {
+		b.wbs = wbs
+		b.w = whiskey.NewRaw(bucketInitSize, b.grow, nil)
+		b.gfn = gfn
+	}
+
 	return &b
 }
 
 // Bucket represents a database bucket
 type Bucket struct {
-	w   *whiskey.Whiskey
+	Txn
+
 	key []byte
-	bs  []byte
-	gfn func(key []byte, sz int64) []byte
+	wbs []byte
+	rbs []byte
+
+	rgfn GrowFn
+	gfn  GrowFn
 }
 
 func (b *Bucket) grow(sz int64) (bs []byte) {
-	if sz <= int64(len(b.bs)) {
-		return b.bs
+	if sz <= int64(len(b.wbs)) {
+		return b.wbs
 	}
 
-	bs = b.gfn(b.key, sz)
-	copy(bs, b.bs)
-	b.bs = bs
+	n := int64(len(b.wbs))
+	for n < sz {
+		n *= 2
+	}
+
+	bs = b.gfn(b.key, n)
+	copy(bs, b.wbs)
+	b.wbs = bs
+	return
+}
+
+func (b *Bucket) growSlave(sz int64) (bs []byte) {
+	if sz <= int64(len(b.rbs)) {
+		return b.rbs
+	}
+
+	if b.rgfn == nil {
+		panic("slave is attempting to grow past it's intended size")
+	}
+
+	n := int64(len(b.rbs))
+	for n < sz {
+		n *= 2
+	}
+
+	bs = b.rgfn(b.key, n)
+	copy(bs, b.rbs)
+	b.rbs = bs
 	return
 }
 
@@ -51,7 +92,13 @@ func (b *Bucket) Close() (err error) {
 	b.w = nil
 
 	b.key = nil
-	b.bs = nil
+	b.rbs = nil
+	b.r = nil
+	b.wbs = nil
+	b.w = nil
 	b.gfn = nil
 	return
 }
+
+// GrowFn is called on grows
+type GrowFn func(key []byte, sz int64) []byte
