@@ -1,9 +1,9 @@
 package glass
 
 import (
-	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/boltDB/bolt"
 	"github.com/itsmontoya/whiskey/testUtils"
@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	testSortedList  = testUtils.GetSorted(10000)
+	testSortedList  = testUtils.GetSorted(100000)
 	testReverseList = testUtils.GetReverse(10000)
 	testRandomList  = testUtils.GetRand(10000)
 
@@ -68,8 +68,6 @@ func TestGlass(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fmt.Printf("\n\nBucket check\n\n")
-
 	if err = g.Read(func(txn *Txn) (err error) {
 		var bkt *Bucket
 		if bkt = txn.Bucket([]byte("basic")); bkt == nil {
@@ -113,6 +111,58 @@ func TestGlass(t *testing.T) {
 	}
 }
 
+func BenchmarkWhiskeyGet(b *testing.B) {
+	var (
+		g   *Glass
+		err error
+	)
+
+	if err = os.MkdirAll("testing", 0755); err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll("testing")
+
+	if g, err = New("testing", "benchmarks"); err != nil {
+		b.Fatal(err)
+	}
+	defer g.Close()
+
+	for _, kv := range testSortedListStr {
+
+		if err = g.Update(func(txn *Txn) (err error) {
+			var bkt *Bucket
+			if bkt, err = txn.CreateBucket(testBktName); err != nil {
+				return
+			}
+
+			if err = bkt.Put(kv.Val, kv.Val); err != nil {
+				return
+			}
+
+			return
+		}); err != nil {
+			b.Fatal(err)
+		}
+
+	}
+
+	time.Sleep(time.Second)
+	//	return
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, kv := range testSortedListStr {
+			g.Read(func(txn *Txn) (err error) {
+				bkt := txn.Bucket(testBktName)
+				testVal, err = bkt.Get(kv.Val)
+				return
+			})
+		}
+	}
+
+	b.ReportAllocs()
+}
+
 func BenchmarkWhiskeyPut(b *testing.B) {
 	var (
 		g   *Glass
@@ -143,6 +193,56 @@ func BenchmarkWhiskeyPut(b *testing.B) {
 			})
 		}
 	}
+
+	b.ReportAllocs()
+}
+
+func BenchmarkBoltGet(b *testing.B) {
+	var (
+		db  *bolt.DB
+		err error
+	)
+
+	if err = os.MkdirAll("testing", 0755); err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll("testing")
+
+	if db, err = bolt.Open("testing/benchmarks.bdb", 0644, nil); err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+
+	if err = db.Update(func(txn *bolt.Tx) (err error) {
+		var bkt *bolt.Bucket
+		if bkt, err = txn.CreateBucket(testBktName); err != nil && err != bolt.ErrBucketExists {
+			return
+		}
+
+		for _, kv := range testSortedListStr {
+			if err = bkt.Put(kv.Val, kv.Val); err != nil {
+				return
+			}
+		}
+
+		return
+	}); err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, kv := range testSortedListStr {
+			db.View(func(txn *bolt.Tx) (err error) {
+				bkt := txn.Bucket(testBktName)
+				testVal = bkt.Get(kv.Val)
+				return
+			})
+		}
+	}
+
+	b.ReportAllocs()
 }
 
 func BenchmarkBoltPut(b *testing.B) {
@@ -175,4 +275,6 @@ func BenchmarkBoltPut(b *testing.B) {
 			})
 		}
 	}
+
+	b.ReportAllocs()
 }
