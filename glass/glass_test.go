@@ -1,13 +1,13 @@
 package glass
 
 import (
+	"fmt"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/boltDB/bolt"
 	"github.com/itsmontoya/whiskey/testUtils"
-	"github.com/missionMeteora/journaler"
 	"github.com/missionMeteora/toolkit/errors"
 )
 
@@ -62,7 +62,10 @@ func TestGlass(t *testing.T) {
 			return
 		}
 
-		journaler.Debug("Checking: %v\n", string(val))
+		if string(val) != "Josh" {
+			return fmt.Errorf("invalid value, expected Josh and received %s", string(val))
+		}
+
 		return
 	}); err != nil {
 		t.Fatal(err)
@@ -83,7 +86,10 @@ func TestGlass(t *testing.T) {
 			return
 		}
 
-		journaler.Debug("Checking: %v\n", string(val))
+		if string(val) != "Josh" {
+			return fmt.Errorf("invalid value, expected Josh and received %s", string(val))
+		}
+
 		return
 	}); err != nil {
 		t.Fatal(err)
@@ -104,7 +110,10 @@ func TestGlass(t *testing.T) {
 		}
 
 		val, _ := bkt.Get([]byte("name"))
-		journaler.Debug("Checking: %v\n", string(val))
+		if string(val) != "Josh" {
+			return fmt.Errorf("invalid value, expected Josh and received %s", string(val))
+		}
+
 		return
 	}); err != nil {
 		t.Fatal(err)
