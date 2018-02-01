@@ -35,6 +35,19 @@ func TestForEach(t *testing.T) {
 		return
 	})
 }
+
+func TestGrow(t *testing.T) {
+	w := New(1024)
+	k := []byte("hello")
+	v := []byte("world")
+	w.Put(k, v)
+	w.Grow(k, 10)
+
+	if rv := w.Get(k); len(rv) != 10 {
+		t.Fatalf("invalid value length, expected %d and received %d (%v)", 10, len(rv), rv)
+	}
+}
+
 func TestBasic(t *testing.T) {
 	tr, err := NewMMAP("data", "mmap.db", 64)
 	if err != nil {

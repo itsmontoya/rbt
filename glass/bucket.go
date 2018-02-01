@@ -53,10 +53,8 @@ func (b *Bucket) grow(sz int64) (bs []byte) {
 		n *= 2
 	}
 
-	bs = b.gfn(b.key, n)
-	copy(bs, b.wbs)
-	b.wbs = bs
-	return
+	b.wbs = b.gfn(b.key, n)
+	return b.wbs
 }
 
 func (b *Bucket) growSlave(sz int64) (bs []byte) {
@@ -73,14 +71,8 @@ func (b *Bucket) growSlave(sz int64) (bs []byte) {
 		n *= 2
 	}
 
-	// This saves segfault, we need to figure out why
-	// Note: This is a huge performance regression
-	bbs := make([]byte, len(b.rbs))
-	copy(bbs, b.rbs)
-	bs = b.rgfn(b.key, n)
-	copy(bs, bbs)
-	b.rbs = bs
-	return
+	b.rbs = b.rgfn(b.key, n)
+	return b.rbs
 }
 
 // Close will close a bucket
