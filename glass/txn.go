@@ -76,7 +76,7 @@ func (t *Txn) CreateBucket(key []byte) (bp *Bucket, err error) {
 
 	t.setKeyBuffer(key)
 	rbs, wbs := t.getBucketBytes(t.kbuf)
-	if rbs == nil && wbs == nil {
+	if wbs == nil {
 		t.w.Put(t.kbuf, make([]byte, bucketInitSize))
 		wbs = t.w.Get(t.kbuf)
 	}
