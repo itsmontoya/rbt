@@ -177,7 +177,13 @@ func (w *Whiskey) setBlob(b *Block, key, value []byte) (grew bool) {
 		return
 	}
 
-	b.blobOffset, grew = w.newBlob(key, value)
+	var offset, boffset int64
+	offset = b.offset
+	if boffset, grew = w.newBlob(key, value); grew {
+		b = w.getBlock(offset)
+	}
+
+	b.blobOffset = boffset
 	b.valLen = valLen
 	return
 }
