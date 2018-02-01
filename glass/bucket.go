@@ -17,12 +17,11 @@ func newBucket(key, rbs, wbs []byte, gfn GrowFn) *Bucket {
 	b.key = make([]byte, len(key))
 	// Copy key buffer to key
 	copy(b.key, key)
-
 	if rbs != nil {
 		b.rbs = rbs
 		b.r = whiskey.NewRaw(bucketInitSize, b.growSlave, nil)
 	}
-	// ITS SOMEWHERE HERE
+
 	if wbs != nil {
 		b.wbs = wbs
 		b.w = whiskey.NewRaw(bucketInitSize, b.grow, nil)
@@ -74,8 +73,12 @@ func (b *Bucket) growSlave(sz int64) (bs []byte) {
 		n *= 2
 	}
 
+	// This saves segfault, we need to figure out why
+	// Note: This is a huge performance regression
+	bbs := make([]byte, len(b.rbs))
+	copy(bbs, b.rbs)
 	bs = b.rgfn(b.key, n)
-	copy(bs, b.rbs)
+	copy(bs, bbs)
 	b.rbs = bs
 	return
 }
