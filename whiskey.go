@@ -584,9 +584,10 @@ func (w *Whiskey) ForEach(fn ForEachFn) (ended bool) {
 }
 
 // Grow will grow a blob value to a given size
-func (w *Whiskey) Grow(key []byte, sz int64) (grew bool) {
+func (w *Whiskey) Grow(key []byte, sz int64) (bs []byte) {
 	var (
 		b      *Block
+		grew   bool
 		offset int64
 	)
 
@@ -614,6 +615,7 @@ func (w *Whiskey) Grow(key []byte, sz int64) (grew bool) {
 		w.l.root = root.parent
 	}
 
+	bs = w.getValue(b)
 	return
 }
 

@@ -46,13 +46,11 @@ func (t *Txn) getRoot(key []byte, sz int64) (bs []byte) {
 }
 
 func (t *Txn) truncateScratch(key []byte, sz int64) (bs []byte) {
-	t.w.Grow(key, sz)
-	return t.w.Get(key)
+	return t.w.Grow(key, sz)
 }
 
 func (t *Txn) truncateRoot(key []byte, sz int64) (bs []byte) {
-	t.r.Grow(key, sz)
-	return t.r.Get(key)
+	return t.r.Grow(key, sz)
 }
 
 // Bucket will return a bucket for a provided key
