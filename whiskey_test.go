@@ -40,11 +40,16 @@ func TestGrow(t *testing.T) {
 	w := New(1024)
 	k := []byte("hello")
 	v := []byte("world")
+	empty := []byte{0, 0, 0, 0, 0}
 	w.Put(k, v)
 	w.Grow(k, 10)
 
 	if rv := w.Get(k); len(rv) != 10 {
 		t.Fatalf("invalid value length, expected %d and received %d (%v)", 10, len(rv), rv)
+	} else if string(rv[:5]) != string(v) {
+		t.Fatalf("invalid value, expected %s and received %s", string(rv[:5]), string(v))
+	} else if string(rv[5:]) != string(empty) {
+		t.Fatalf("invalid value, expected an end of %v and received %v", empty, rv[5:])
 	}
 }
 

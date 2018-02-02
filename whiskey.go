@@ -3,6 +3,13 @@ package whiskey
 import (
 	"bytes"
 	"unsafe"
+
+	"github.com/missionMeteora/toolkit/errors"
+)
+
+const (
+	// ErrCannotAllocate is returned when Whiskey cannot allocate the bytes it needs
+	ErrCannotAllocate = errors.Error("cannot allocate needed bytes")
 )
 
 const (
@@ -29,7 +36,8 @@ var (
 // sz is the size (in bytes) to initially allocate for this db
 func New(sz int64) (w *Whiskey) {
 	bs := newBytes()
-	w = NewRaw(sz, bs.grow, nil)
+	// The only error that can return is ErrCannotAllocate which will not occur for a simple Bytes backend
+	w, _ = NewRaw(sz, bs.grow, nil)
 	return
 }
 
@@ -41,19 +49,27 @@ func NewMMAP(dir, name string, sz int64) (w *Whiskey, err error) {
 		return
 	}
 
-	w = NewRaw(sz, mm.grow, mm.Close)
-	return
+	return NewRaw(sz, mm.grow, mm.Close)
 }
 
 // NewRaw will return a new Whiskey with the provided size, grow func, and close func
 // sz is the size (in bytes) to initially allocate for this db
 // gfn is the function to call on grows
 // cfn is the function to call on close (optional)
-func NewRaw(sz int64, gfn GrowFn, cfn CloseFn) *Whiskey {
+func NewRaw(sz int64, gfn GrowFn, cfn CloseFn) (wp *Whiskey, err error) {
 	var w Whiskey
 	w.gfn = gfn
 	w.cfn = cfn
-	w.bs = w.gfn(sz)
+
+	if sz < labelSize {
+		sz = labelSize
+	}
+
+	if w.bs = w.gfn(sz); int64(len(w.bs)) < sz {
+		err = ErrCannotAllocate
+		return
+	}
+
 	w.setLabel()
 	// Check if trunk has been initialized
 	if w.l.tail == 0 {
@@ -63,7 +79,8 @@ func NewRaw(sz int64, gfn GrowFn, cfn CloseFn) *Whiskey {
 		w.l.cap = sz
 	}
 
-	return &w
+	wp = &w
+	return
 }
 
 // Whiskey is a red-black tree data structure
@@ -204,7 +221,7 @@ func (w *Whiskey) growBlob(b *Block, key []byte, sz int64) (grew bool) {
 	copy(w.bs[boffset+b.keyLen:], value)
 	w.l.tail += blobLen
 
-	for i := boffset - delta; i < boffset; i++ {
+	for i := w.l.tail - delta; i < w.l.tail; i++ {
 		w.bs[i] = 0
 	}
 
@@ -216,7 +233,6 @@ func (w *Whiskey) growBlob(b *Block, key []byte, sz int64) (grew bool) {
 func (w *Whiskey) newBlock(key []byte) (b *Block, offset int64, grew bool) {
 	offset = w.l.tail
 	grew = w.grow(offset + blockSize)
-
 	b = w.getBlock(offset)
 	w.l.tail += blockSize
 
@@ -231,6 +247,7 @@ func (w *Whiskey) newBlock(key []byte) (b *Block, offset int64, grew bool) {
 	b.children[1] = -1
 	// Set key length
 	b.keyLen = int64(len(key))
+	b.valLen = 0
 	// Debug
 	b.derp = 67
 	return

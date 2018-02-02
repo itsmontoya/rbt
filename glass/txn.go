@@ -41,7 +41,11 @@ func (t *Txn) getBucketBytes(key []byte) (rbs, wbs []byte) {
 	return
 }
 
-func (t *Txn) truncate(key []byte, sz int64) (bs []byte) {
+func (t *Txn) getRoot(key []byte, sz int64) (bs []byte) {
+	return t.r.Get(key)
+}
+
+func (t *Txn) truncateScratch(key []byte, sz int64) (bs []byte) {
 	t.w.Grow(key, sz)
 	return t.w.Get(key)
 }
@@ -54,17 +58,17 @@ func (t *Txn) truncateRoot(key []byte, sz int64) (bs []byte) {
 // Bucket will return a bucket for a provided key
 func (t *Txn) Bucket(key []byte) (bp *Bucket) {
 	t.setKeyBuffer(key)
-	rbs, wbs := t.getBucketBytes(t.kbuf)
-	if rbs == nil && wbs == nil {
-		return
+
+	var rgfn, sgfn GrowFn
+	if t.r != nil {
+		rgfn = t.getRoot
 	}
 
-	if wbs == nil && t.w != nil {
-		t.w.Put(t.kbuf, make([]byte, bucketInitSize))
-		wbs = t.w.Get(t.kbuf)
+	if t.w != nil {
+		sgfn = t.truncateScratch
 	}
 
-	return newBucket(t.kbuf, rbs, wbs, t.truncate)
+	return newBucket(t.kbuf, rgfn, sgfn)
 }
 
 // CreateBucket will create a bucket for a provided key
@@ -75,13 +79,17 @@ func (t *Txn) CreateBucket(key []byte) (bp *Bucket, err error) {
 	}
 
 	t.setKeyBuffer(key)
-	rbs, wbs := t.getBucketBytes(t.kbuf)
-	if wbs == nil {
-		t.w.Put(t.kbuf, make([]byte, bucketInitSize))
-		wbs = t.w.Get(t.kbuf)
+
+	var rgfn, sgfn GrowFn
+	if t.r != nil {
+		rgfn = t.getRoot
 	}
 
-	bp = newBucket(t.kbuf, rbs, wbs, t.truncate)
+	if t.w != nil {
+		sgfn = t.truncateScratch
+	}
+
+	bp = newBucket(t.kbuf, rgfn, sgfn)
 	return
 }
 
@@ -125,15 +133,7 @@ func (t *Txn) writeEntry(key, val []byte) (end bool) {
 		return
 	}
 
-	rbs := t.r.Get(key)
-	if rbs == nil {
-		t.r.Put(t.kbuf, make([]byte, bucketInitSize))
-		rbs = t.r.Get(key)
-
-	}
-
-	bkt := newBucket(key, rbs, val, t.truncate)
-	bkt.rgfn = t.truncateRoot
+	bkt := newBucket(key, t.truncateRoot, t.truncateScratch)
 	end = bkt.w.ForEach(func(key, val []byte) (end bool) {
 		return bkt.writeEntry(key, val)
 	})
