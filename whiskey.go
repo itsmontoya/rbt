@@ -142,13 +142,11 @@ func (w *Whiskey) getBlock(offset int64) (b *Block) {
 }
 
 func (w *Whiskey) getKey(b *Block) (key []byte) {
-	blobIndex := b.offset + blockSize
-	return w.bs[blobIndex : blobIndex+b.keyLen]
+	return w.bs[b.blobOffset : b.blobOffset+b.keyLen]
 }
 
 func (w *Whiskey) getValue(b *Block) (value []byte) {
-	blobIndex := b.offset + blockSize
-	valueIndex := blobIndex + b.keyLen
+	valueIndex := b.blobOffset + b.keyLen
 	return w.bs[valueIndex : valueIndex+b.valLen]
 }
 
@@ -189,23 +187,26 @@ func (w *Whiskey) setBlob(b *Block, key, value []byte) (grew bool) {
 }
 
 func (w *Whiskey) growBlob(b *Block, key []byte, sz int64) (grew bool) {
-	if b.valLen == sz {
+	delta := sz - b.valLen
+	if delta <= 0 {
 		return
 	}
 
 	offset := b.offset
 	boffset := w.l.tail
 	blobLen := int64(len(key)) + sz
-
 	if grew = w.grow(boffset + blobLen); grew {
 		b = w.getBlock(offset)
 	}
 
 	value := w.getValue(b)
 	copy(w.bs[boffset:], key)
-	copy(w.bs[boffset+int64(len(key)):], value)
-
+	copy(w.bs[boffset+b.keyLen:], value)
 	w.l.tail += blobLen
+
+	for i := boffset - delta; i < boffset; i++ {
+		w.bs[i] = 0
+	}
 
 	b.blobOffset = boffset
 	b.valLen = sz
