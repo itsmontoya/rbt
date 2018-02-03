@@ -11,9 +11,9 @@ import (
 )
 
 var (
-	testSortedList  = testUtils.GetSorted(100000)
-	testReverseList = testUtils.GetReverse(10000)
-	testRandomList  = testUtils.GetRand(10000)
+	testSortedList  = testUtils.GetSorted(1000)
+	testReverseList = testUtils.GetReverse(1000)
+	testRandomList  = testUtils.GetRand(1000)
 
 	testSortedListStr  = testUtils.GetStrSlice(testSortedList)
 	testReverseListStr = testUtils.GetStrSlice(testReverseList)
@@ -190,14 +190,56 @@ func BenchmarkWhiskeyPut(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range testSortedListStr {
-			g.Update(func(txn *Txn) (err error) {
+			if err = g.Update(func(txn *Txn) (err error) {
 				var bkt *Bucket
 				if bkt, err = txn.CreateBucket(testBktName); err != nil {
 					return
 				}
 
 				return bkt.Put(kv.Val, kv.Val)
-			})
+			}); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+
+	b.ReportAllocs()
+}
+
+func BenchmarkWhiskeyBatchPut(b *testing.B) {
+	var (
+		g   *Glass
+		err error
+	)
+
+	if err = os.MkdirAll("testing", 0755); err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll("testing")
+
+	if g, err = New("testing", "benchmarks"); err != nil {
+		b.Fatal(err)
+	}
+	defer g.Close()
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		if err = g.Update(func(txn *Txn) (err error) {
+			var bkt *Bucket
+			if bkt, err = txn.CreateBucket(testBktName); err != nil {
+				return
+			}
+
+			for _, kv := range testSortedListStr {
+				if err = bkt.Put(kv.Val, kv.Val); err != nil {
+					return
+				}
+			}
+
+			return
+		}); err != nil {
+			b.Fatal(err)
 		}
 	}
 
@@ -268,18 +310,65 @@ func BenchmarkBoltPut(b *testing.B) {
 	}
 	defer db.Close()
 
+	if err = db.Update(func(txn *bolt.Tx) (err error) {
+		_, err = txn.CreateBucket(testBktName)
+		return
+	}); err != nil {
+		b.Fatal(err)
+	}
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		for _, kv := range testSortedListStr {
-			db.Update(func(txn *bolt.Tx) (err error) {
-				var bkt *bolt.Bucket
-				if bkt, err = txn.CreateBucket(testBktName); err != nil {
+			if err = db.Update(func(txn *bolt.Tx) (err error) {
+				bkt := txn.Bucket(testBktName)
+				return bkt.Put(kv.Val, kv.Val)
+			}); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+
+	b.ReportAllocs()
+}
+
+func BenchmarkBoltBatchPut(b *testing.B) {
+	var (
+		db  *bolt.DB
+		err error
+	)
+
+	if err = os.MkdirAll("testing", 0755); err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll("testing")
+
+	if db, err = bolt.Open("testing/benchmarks.bdb", 0644, nil); err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+
+	if err = db.Update(func(txn *bolt.Tx) (err error) {
+		_, err = txn.CreateBucket(testBktName)
+		return
+	}); err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		if err = db.Update(func(txn *bolt.Tx) (err error) {
+			bkt := txn.Bucket(testBktName)
+
+			for _, kv := range testSortedListStr {
+				if err = bkt.Put(kv.Val, kv.Val); err != nil {
 					return
 				}
+			}
 
-				return bkt.Put(kv.Val, kv.Val)
-			})
+			return
+		}); err != nil {
+			b.Fatal(err)
 		}
 	}
 
