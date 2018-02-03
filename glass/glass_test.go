@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/boltDB/bolt"
 	"github.com/itsmontoya/whiskey/testUtils"
@@ -155,7 +154,6 @@ func BenchmarkWhiskeyGet(b *testing.B) {
 
 	}
 
-	time.Sleep(time.Second)
 	//	return
 	b.ResetTimer()
 

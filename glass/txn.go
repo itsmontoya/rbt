@@ -1,6 +1,8 @@
 package glass
 
 import (
+	"bytes"
+
 	"github.com/itsmontoya/whiskey"
 	"github.com/missionMeteora/toolkit/errors"
 )
@@ -16,6 +18,7 @@ type Txn struct {
 	w *whiskey.Whiskey
 
 	kbuf []byte
+	bkts []*Bucket
 }
 
 func (t *Txn) setKeyBuffer(key []byte) {
@@ -45,38 +48,34 @@ func (t *Txn) getRoot(key []byte, sz int64) (bs []byte) {
 	return t.r.Get(key)
 }
 
+func (t *Txn) getBucket(key []byte) *Bucket {
+	for _, b := range t.bkts {
+		if bytes.Equal(key, b.key) {
+			return b
+		}
+	}
+
+	return nil
+}
+
 func (t *Txn) truncateScratch(key []byte, sz int64) (bs []byte) {
+	//	journaler.Debug("Growing scratch: %d", sz)
 	return t.w.Grow(key, sz)
 }
 
 func (t *Txn) truncateRoot(key []byte, sz int64) (bs []byte) {
+	//	journaler.Debug("Growing root: %d", sz)
 	return t.r.Grow(key, sz)
 }
 
 // Bucket will return a bucket for a provided key
 func (t *Txn) Bucket(key []byte) (bp *Bucket) {
 	t.setKeyBuffer(key)
-
-	var rgfn, sgfn GrowFn
-	if t.r != nil {
-		rgfn = t.getRoot
-	}
-
 	if t.w != nil {
-		sgfn = t.truncateScratch
+		if bp = t.getBucket(t.kbuf); bp != nil {
+			return
+		}
 	}
-
-	return newBucket(t.kbuf, rgfn, sgfn)
-}
-
-// CreateBucket will create a bucket for a provided key
-func (t *Txn) CreateBucket(key []byte) (bp *Bucket, err error) {
-	if t.w == nil {
-		err = ErrCannotWrite
-		return
-	}
-
-	t.setKeyBuffer(key)
 
 	var rgfn, sgfn GrowFn
 	if t.r != nil {
@@ -88,6 +87,36 @@ func (t *Txn) CreateBucket(key []byte) (bp *Bucket, err error) {
 	}
 
 	bp = newBucket(t.kbuf, rgfn, sgfn)
+	if t.w != nil {
+		t.bkts = append(t.bkts, bp)
+	}
+
+	return
+}
+
+// CreateBucket will create a bucket for a provided key
+func (t *Txn) CreateBucket(key []byte) (bp *Bucket, err error) {
+	if t.w == nil {
+		err = ErrCannotWrite
+		return
+	}
+
+	t.setKeyBuffer(key)
+	if bp = t.getBucket(t.kbuf); bp != nil {
+		return
+	}
+
+	var rgfn, sgfn GrowFn
+	if t.r != nil {
+		rgfn = t.getRoot
+	}
+
+	if t.w != nil {
+		sgfn = t.truncateScratch
+	}
+
+	bp = newBucket(t.kbuf, rgfn, sgfn)
+	t.bkts = append(t.bkts, bp)
 	return
 }
 
@@ -125,21 +154,29 @@ func (t *Txn) Put(key []byte, val []byte) (err error) {
 }
 
 func (t *Txn) writeEntry(key, val []byte) (end bool) {
-	if key[0] != bucketPrefix {
-		// Flush value to main branch
-		t.r.Put(key, val)
+	if key[0] == bucketPrefix {
 		return
 	}
 
-	bkt := newBucket(key, t.truncateRoot, t.truncateScratch)
-	end = bkt.w.ForEach(func(key, val []byte) (end bool) {
-		return bkt.writeEntry(key, val)
-	})
-
+	// Flush value to main branch
+	t.r.Put(key, val)
 	return
 }
 
 func (t *Txn) flush() (err error) {
+	for _, b := range t.bkts {
+		b.rgfn = t.truncateRoot
+		if b.r == nil {
+			if b.r, err = whiskey.NewRaw(bucketInitSize, b.growRoot, nil); err != nil {
+				return
+			}
+		}
+
+		if err = b.flush(); err != nil {
+			return
+		}
+	}
+
 	t.w.ForEach(t.writeEntry)
 	return
 }

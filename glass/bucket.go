@@ -72,8 +72,7 @@ func (b *Bucket) growScratch(sz int64) (bs []byte) {
 		b.ssz *= 2
 	}
 
-	bs = b.sgfn(b.key, b.ssz)
-	return
+	return b.sgfn(b.key, b.ssz)
 }
 
 // NOTE: Trying to clean up how buckets allocate themselves
