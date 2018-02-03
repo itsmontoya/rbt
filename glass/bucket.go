@@ -36,8 +36,6 @@ type Bucket struct {
 	Txn
 
 	key []byte
-	rsz int64
-	ssz int64
 
 	rgfn GrowFn
 	sgfn GrowFn
@@ -48,15 +46,7 @@ func (b *Bucket) growRoot(sz int64) (bs []byte) {
 		panic("root is attempting to grow past it's intended size")
 	}
 
-	if b.rsz == 0 {
-		b.rsz = sz
-	}
-
-	for b.rsz < sz {
-		b.rsz *= 2
-	}
-
-	return b.rgfn(b.key, b.rsz)
+	return b.rgfn(b.key, sz)
 }
 
 func (b *Bucket) growScratch(sz int64) (bs []byte) {
@@ -64,15 +54,7 @@ func (b *Bucket) growScratch(sz int64) (bs []byte) {
 		panic("scratch is attempting to grow past it's intended size")
 	}
 
-	if b.ssz == 0 {
-		b.ssz = sz
-	}
-
-	for b.ssz < sz {
-		b.ssz *= 2
-	}
-
-	return b.sgfn(b.key, b.ssz)
+	return b.sgfn(b.key, sz)
 }
 
 // NOTE: Trying to clean up how buckets allocate themselves

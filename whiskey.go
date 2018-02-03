@@ -204,14 +204,24 @@ func (w *Whiskey) setBlob(b *Block, key, value []byte) (grew bool) {
 }
 
 func (w *Whiskey) growBlob(b *Block, key []byte, sz int64) (grew bool) {
-	delta := sz - b.valLen
-	if delta <= 0 {
+	if sz <= b.valLen {
 		return
 	}
 
+	vlen := b.valLen
+	if vlen == 0 {
+		vlen = sz
+	}
+
+	for vlen < sz {
+		vlen *= 2
+	}
+
+	delta := vlen - b.valLen
+
 	offset := b.offset
 	boffset := w.l.tail
-	blobLen := int64(len(key)) + sz
+	blobLen := int64(len(key)) + vlen
 	if grew = w.grow(boffset + blobLen); grew {
 		b = w.getBlock(offset)
 	}
@@ -226,7 +236,7 @@ func (w *Whiskey) growBlob(b *Block, key []byte, sz int64) (grew bool) {
 	}
 
 	b.blobOffset = boffset
-	b.valLen = sz
+	b.valLen = vlen
 	return
 }
 
