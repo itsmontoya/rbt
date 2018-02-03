@@ -8,7 +8,7 @@ const (
 	bucketInitSize = 256
 )
 
-func newBucket(key, rbs, wbs []byte, gfn GrowFn) *Bucket {
+func newBucket(key []byte, rgfn, sgfn GrowFn) *Bucket {
 	var b Bucket
 	// Because the provided key is a reference to the DB's key buffer, we will need to copy
 	// the contents into a new slice so that we don't encounter any race conditions later
@@ -17,15 +17,15 @@ func newBucket(key, rbs, wbs []byte, gfn GrowFn) *Bucket {
 	b.key = make([]byte, len(key))
 	// Copy key buffer to key
 	copy(b.key, key)
-	if rbs != nil {
-		b.rbs = rbs
-		b.r = whiskey.NewRaw(bucketInitSize, b.growSlave, nil)
+
+	if rgfn != nil {
+		b.rgfn = rgfn
+		b.r, _ = whiskey.NewRaw(bucketInitSize, b.growRoot, nil)
 	}
 
-	if wbs != nil {
-		b.wbs = wbs
-		b.w = whiskey.NewRaw(bucketInitSize, b.grow, nil)
-		b.gfn = gfn
+	if sgfn != nil {
+		b.sgfn = sgfn
+		b.w, _ = whiskey.NewRaw(bucketInitSize, b.growScratch, nil)
 	}
 
 	return &b
@@ -36,44 +36,46 @@ type Bucket struct {
 	Txn
 
 	key []byte
-	wbs []byte
-	rbs []byte
+	rsz int64
+	ssz int64
 
 	rgfn GrowFn
-	gfn  GrowFn
+	sgfn GrowFn
 }
 
-func (b *Bucket) grow(sz int64) (bs []byte) {
-	if sz <= int64(len(b.wbs)) {
-		return b.wbs
-	}
-
-	n := int64(len(b.wbs))
-	for n < sz {
-		n *= 2
-	}
-
-	b.wbs = b.gfn(b.key, n)
-	return b.wbs
-}
-
-func (b *Bucket) growSlave(sz int64) (bs []byte) {
-	if sz <= int64(len(b.rbs)) {
-		return b.rbs
-	}
-
+func (b *Bucket) growRoot(sz int64) (bs []byte) {
 	if b.rgfn == nil {
-		panic("slave is attempting to grow past it's intended size")
+		panic("root is attempting to grow past it's intended size")
 	}
 
-	n := int64(len(b.rbs))
-	for n < sz {
-		n *= 2
+	if b.rsz == 0 {
+		b.rsz = sz
 	}
 
-	b.rbs = b.rgfn(b.key, n)
-	return b.rbs
+	for b.rsz < sz {
+		b.rsz *= 2
+	}
+
+	return b.rgfn(b.key, b.rsz)
 }
+
+func (b *Bucket) growScratch(sz int64) (bs []byte) {
+	if b.sgfn == nil {
+		panic("scratch is attempting to grow past it's intended size")
+	}
+
+	if b.ssz == 0 {
+		b.ssz = sz
+	}
+
+	for b.ssz < sz {
+		b.ssz *= 2
+	}
+
+	return b.sgfn(b.key, b.ssz)
+}
+
+// NOTE: Trying to clean up how buckets allocate themselves
 
 // Close will close a bucket
 func (b *Bucket) Close() (err error) {
@@ -87,11 +89,10 @@ func (b *Bucket) Close() (err error) {
 	b.w = nil
 
 	b.key = nil
-	b.rbs = nil
 	b.r = nil
-	b.wbs = nil
 	b.w = nil
-	b.gfn = nil
+	b.rgfn = nil
+	b.sgfn = nil
 	return
 }
 

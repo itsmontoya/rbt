@@ -3,6 +3,13 @@ package whiskey
 import (
 	"bytes"
 	"unsafe"
+
+	"github.com/missionMeteora/toolkit/errors"
+)
+
+const (
+	// ErrCannotAllocate is returned when Whiskey cannot allocate the bytes it needs
+	ErrCannotAllocate = errors.Error("cannot allocate needed bytes")
 )
 
 const (
@@ -29,7 +36,8 @@ var (
 // sz is the size (in bytes) to initially allocate for this db
 func New(sz int64) (w *Whiskey) {
 	bs := newBytes()
-	w = NewRaw(sz, bs.grow, nil)
+	// The only error that can return is ErrCannotAllocate which will not occur for a simple Bytes backend
+	w, _ = NewRaw(sz, bs.grow, nil)
 	return
 }
 
@@ -41,19 +49,27 @@ func NewMMAP(dir, name string, sz int64) (w *Whiskey, err error) {
 		return
 	}
 
-	w = NewRaw(sz, mm.grow, mm.Close)
-	return
+	return NewRaw(sz, mm.grow, mm.Close)
 }
 
 // NewRaw will return a new Whiskey with the provided size, grow func, and close func
 // sz is the size (in bytes) to initially allocate for this db
 // gfn is the function to call on grows
 // cfn is the function to call on close (optional)
-func NewRaw(sz int64, gfn GrowFn, cfn CloseFn) *Whiskey {
+func NewRaw(sz int64, gfn GrowFn, cfn CloseFn) (wp *Whiskey, err error) {
 	var w Whiskey
 	w.gfn = gfn
 	w.cfn = cfn
-	w.bs = w.gfn(sz)
+
+	if sz < labelSize {
+		sz = labelSize
+	}
+
+	if w.bs = w.gfn(sz); int64(len(w.bs)) < sz {
+		err = ErrCannotAllocate
+		return
+	}
+
 	w.setLabel()
 	// Check if trunk has been initialized
 	if w.l.tail == 0 {
@@ -63,7 +79,8 @@ func NewRaw(sz int64, gfn GrowFn, cfn CloseFn) *Whiskey {
 		w.l.cap = sz
 	}
 
-	return &w
+	wp = &w
+	return
 }
 
 // Whiskey is a red-black tree data structure
@@ -142,13 +159,11 @@ func (w *Whiskey) getBlock(offset int64) (b *Block) {
 }
 
 func (w *Whiskey) getKey(b *Block) (key []byte) {
-	blobIndex := b.offset + blockSize
-	return w.bs[blobIndex : blobIndex+b.keyLen]
+	return w.bs[b.blobOffset : b.blobOffset+b.keyLen]
 }
 
 func (w *Whiskey) getValue(b *Block) (value []byte) {
-	blobIndex := b.offset + blockSize
-	valueIndex := blobIndex + b.keyLen
+	valueIndex := b.blobOffset + b.keyLen
 	return w.bs[valueIndex : valueIndex+b.valLen]
 }
 
@@ -189,23 +204,26 @@ func (w *Whiskey) setBlob(b *Block, key, value []byte) (grew bool) {
 }
 
 func (w *Whiskey) growBlob(b *Block, key []byte, sz int64) (grew bool) {
-	if b.valLen == sz {
+	delta := sz - b.valLen
+	if delta <= 0 {
 		return
 	}
 
 	offset := b.offset
 	boffset := w.l.tail
 	blobLen := int64(len(key)) + sz
-
 	if grew = w.grow(boffset + blobLen); grew {
 		b = w.getBlock(offset)
 	}
 
 	value := w.getValue(b)
 	copy(w.bs[boffset:], key)
-	copy(w.bs[boffset+int64(len(key)):], value)
-
+	copy(w.bs[boffset+b.keyLen:], value)
 	w.l.tail += blobLen
+
+	for i := w.l.tail - delta; i < w.l.tail; i++ {
+		w.bs[i] = 0
+	}
 
 	b.blobOffset = boffset
 	b.valLen = sz
@@ -215,7 +233,6 @@ func (w *Whiskey) growBlob(b *Block, key []byte, sz int64) (grew bool) {
 func (w *Whiskey) newBlock(key []byte) (b *Block, offset int64, grew bool) {
 	offset = w.l.tail
 	grew = w.grow(offset + blockSize)
-
 	b = w.getBlock(offset)
 	w.l.tail += blockSize
 
@@ -230,6 +247,7 @@ func (w *Whiskey) newBlock(key []byte) (b *Block, offset int64, grew bool) {
 	b.children[1] = -1
 	// Set key length
 	b.keyLen = int64(len(key))
+	b.valLen = 0
 	// Debug
 	b.derp = 67
 	return
@@ -566,9 +584,10 @@ func (w *Whiskey) ForEach(fn ForEachFn) (ended bool) {
 }
 
 // Grow will grow a blob value to a given size
-func (w *Whiskey) Grow(key []byte, sz int64) (grew bool) {
+func (w *Whiskey) Grow(key []byte, sz int64) (bs []byte) {
 	var (
 		b      *Block
+		grew   bool
 		offset int64
 	)
 
@@ -596,6 +615,7 @@ func (w *Whiskey) Grow(key []byte, sz int64) (grew bool) {
 		w.l.root = root.parent
 	}
 
+	bs = w.getValue(b)
 	return
 }
 

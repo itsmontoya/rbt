@@ -1,6 +1,8 @@
 package glass
 
 import (
+	"bytes"
+
 	"github.com/itsmontoya/whiskey"
 	"github.com/missionMeteora/toolkit/errors"
 )
@@ -16,6 +18,7 @@ type Txn struct {
 	w *whiskey.Whiskey
 
 	kbuf []byte
+	bkts []*Bucket
 }
 
 func (t *Txn) setKeyBuffer(key []byte) {
@@ -41,30 +44,54 @@ func (t *Txn) getBucketBytes(key []byte) (rbs, wbs []byte) {
 	return
 }
 
-func (t *Txn) truncate(key []byte, sz int64) (bs []byte) {
-	t.w.Grow(key, sz)
-	return t.w.Get(key)
+func (t *Txn) getRoot(key []byte, sz int64) (bs []byte) {
+	return t.r.Get(key)
+}
+
+func (t *Txn) getBucket(key []byte) *Bucket {
+	for _, b := range t.bkts {
+		if bytes.Equal(key, b.key) {
+			return b
+		}
+	}
+
+	return nil
+}
+
+func (t *Txn) truncateScratch(key []byte, sz int64) (bs []byte) {
+	//	journaler.Debug("Growing scratch: %d", sz)
+	return t.w.Grow(key, sz)
 }
 
 func (t *Txn) truncateRoot(key []byte, sz int64) (bs []byte) {
-	t.r.Grow(key, sz)
-	return t.r.Get(key)
+	//	journaler.Debug("Growing root: %d", sz)
+	return t.r.Grow(key, sz)
 }
 
 // Bucket will return a bucket for a provided key
 func (t *Txn) Bucket(key []byte) (bp *Bucket) {
 	t.setKeyBuffer(key)
-	rbs, wbs := t.getBucketBytes(t.kbuf)
-	if rbs == nil && wbs == nil {
-		return
+	if t.w != nil {
+		if bp = t.getBucket(t.kbuf); bp != nil {
+			return
+		}
 	}
 
-	if wbs == nil && t.w != nil {
-		t.w.Put(t.kbuf, make([]byte, bucketInitSize))
-		wbs = t.w.Get(t.kbuf)
+	var rgfn, sgfn GrowFn
+	if t.r != nil {
+		rgfn = t.getRoot
 	}
 
-	return newBucket(t.kbuf, rbs, wbs, t.truncate)
+	if t.w != nil {
+		sgfn = t.truncateScratch
+	}
+
+	bp = newBucket(t.kbuf, rgfn, sgfn)
+	if t.w != nil {
+		t.bkts = append(t.bkts, bp)
+	}
+
+	return
 }
 
 // CreateBucket will create a bucket for a provided key
@@ -75,13 +102,21 @@ func (t *Txn) CreateBucket(key []byte) (bp *Bucket, err error) {
 	}
 
 	t.setKeyBuffer(key)
-	rbs, wbs := t.getBucketBytes(t.kbuf)
-	if wbs == nil {
-		t.w.Put(t.kbuf, make([]byte, bucketInitSize))
-		wbs = t.w.Get(t.kbuf)
+	if bp = t.getBucket(t.kbuf); bp != nil {
+		return
 	}
 
-	bp = newBucket(t.kbuf, rbs, wbs, t.truncate)
+	var rgfn, sgfn GrowFn
+	if t.r != nil {
+		rgfn = t.getRoot
+	}
+
+	if t.w != nil {
+		sgfn = t.truncateScratch
+	}
+
+	bp = newBucket(t.kbuf, rgfn, sgfn)
+	t.bkts = append(t.bkts, bp)
 	return
 }
 
@@ -119,29 +154,29 @@ func (t *Txn) Put(key []byte, val []byte) (err error) {
 }
 
 func (t *Txn) writeEntry(key, val []byte) (end bool) {
-	if key[0] != bucketPrefix {
-		// Flush value to main branch
-		t.r.Put(key, val)
+	if key[0] == bucketPrefix {
 		return
 	}
 
-	rbs := t.r.Get(key)
-	if rbs == nil {
-		t.r.Put(t.kbuf, make([]byte, bucketInitSize))
-		rbs = t.r.Get(key)
-
-	}
-
-	bkt := newBucket(key, rbs, val, t.truncate)
-	bkt.rgfn = t.truncateRoot
-	end = bkt.w.ForEach(func(key, val []byte) (end bool) {
-		return bkt.writeEntry(key, val)
-	})
-
+	// Flush value to main branch
+	t.r.Put(key, val)
 	return
 }
 
 func (t *Txn) flush() (err error) {
+	for _, b := range t.bkts {
+		b.rgfn = t.truncateRoot
+		if b.r == nil {
+			if b.r, err = whiskey.NewRaw(bucketInitSize, b.growRoot, nil); err != nil {
+				return
+			}
+		}
+
+		if err = b.flush(); err != nil {
+			return
+		}
+	}
+
 	t.w.ForEach(t.writeEntry)
 	return
 }
