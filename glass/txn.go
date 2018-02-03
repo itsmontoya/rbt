@@ -42,12 +42,12 @@ func (t *Txn) getBucketBytes(key []byte) (rbs, wbs []byte) {
 }
 
 func (t *Txn) truncate(key []byte, sz int64) (bs []byte) {
-	t.w.Put(key, make([]byte, sz))
+	t.w.Grow(key, sz)
 	return t.w.Get(key)
 }
 
 func (t *Txn) truncateRoot(key []byte, sz int64) (bs []byte) {
-	t.r.Put(key, make([]byte, sz))
+	t.r.Grow(key, sz)
 	return t.r.Get(key)
 }
 

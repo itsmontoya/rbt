@@ -188,6 +188,30 @@ func (w *Whiskey) setBlob(b *Block, key, value []byte) (grew bool) {
 	return
 }
 
+func (w *Whiskey) growBlob(b *Block, key []byte, sz int64) (grew bool) {
+	if b.valLen == sz {
+		return
+	}
+
+	offset := b.offset
+	boffset := w.l.tail
+	blobLen := int64(len(key)) + sz
+
+	if grew = w.grow(boffset + blobLen); grew {
+		b = w.getBlock(offset)
+	}
+
+	value := w.getValue(b)
+	copy(w.bs[boffset:], key)
+	copy(w.bs[boffset+int64(len(key)):], value)
+
+	w.l.tail += blobLen
+
+	b.blobOffset = boffset
+	b.valLen = sz
+	return
+}
+
 func (w *Whiskey) newBlock(key []byte) (b *Block, offset int64, grew bool) {
 	offset = w.l.tail
 	grew = w.grow(offset + blockSize)
@@ -539,6 +563,40 @@ func (w *Whiskey) ForEach(fn ForEachFn) (ended bool) {
 
 	// Call iterate from root
 	return w.iterate(w.getBlock(w.l.root), fn)
+}
+
+// Grow will grow a blob value to a given size
+func (w *Whiskey) Grow(key []byte, sz int64) (grew bool) {
+	var (
+		b      *Block
+		offset int64
+	)
+
+	if w.l.root == -1 {
+		// Root doesn't exist, we can create one
+		b, offset, _ = w.newBlock(key)
+		w.l.root = offset
+	} else {
+		// Find node whose key matches our provided key, if node does not exist - create it.
+		offset, grew = w.seekBlock(w.l.root, key, true)
+		b = w.getBlock(offset)
+	}
+
+	if grew = w.growBlob(b, key, sz); grew {
+		b = w.getBlock(offset)
+	}
+
+	// Balance tree after insert
+	// TODO: This can be moved into the node-creation portion
+	w.balance(b)
+
+	root := w.getBlock(w.l.root)
+	if root.ct != childRoot {
+		// Root has changed, update root reference to the new root
+		w.l.root = root.parent
+	}
+
+	return
 }
 
 // Reset will clear the tree and keep the backend. Can be used as a fresh store
