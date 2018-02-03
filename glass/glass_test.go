@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/boltDB/bolt"
+	"github.com/missionMeteora/bmdb"
 	"github.com/szferi/gomdb"
 
 	"github.com/itsmontoya/whiskey/testUtils"
@@ -397,21 +398,36 @@ func BenchmarkLMDBBatchPut(b *testing.B) {
 	}
 
 	env.SetMapSize(1 << 20) // max file size
+	env.SetMaxDBs(mdb.DBI(12))
+
 	if err = env.Open("testing/mdb", 0, 0664); err != nil {
 		b.Fatal(err)
 	}
 	defer env.Close()
 
-	txn, _ := env.BeginTxn(nil, 0)
+	txn, err := env.BeginTxn(nil, 0)
+	if err != nil {
+		b.Fatal(err)
+	}
+
 	dbin := string(testBktName)
-	dbi, _ := txn.DBIOpen(&dbin, mdb.CREATE)
-	env.DBIClose(dbi)
-	txn.Commit()
+	dbi, err := txn.DBIOpen(&dbin, mdb.CREATE)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer env.DBIClose(dbi)
+	if err = txn.Commit(); err != nil {
+		b.Fatal(err)
+	}
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		txn, _ := env.BeginTxn(nil, 0)
-		dbin := string(testBktName)
+		txn, err := env.BeginTxn(nil, 0)
+		if err != nil {
+			b.Fatal(err)
+		}
+
+		dbin = string(testBktName)
 		dbi, err := txn.DBIOpen(&dbin, 0)
 		if err != nil {
 			b.Fatal(err)
@@ -425,6 +441,49 @@ func BenchmarkLMDBBatchPut(b *testing.B) {
 
 		env.DBIClose(dbi)
 		txn.Commit()
+	}
+
+	b.ReportAllocs()
+}
+
+func BenchmarkBMDBBatchPut(b *testing.B) {
+	var (
+		db  *bmdb.DB
+		err error
+	)
+
+	if err = os.MkdirAll("testing", 0755); err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll("testing")
+
+	if db, err = bmdb.Open("testing/benchmarks.bdb", 0644, nil); err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+
+	if err = db.Update(func(txn *bmdb.Tx) (err error) {
+		_, err = txn.CreateBucket(testBktName)
+		return
+	}); err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		if err = db.Update(func(txn *bmdb.Tx) (err error) {
+			bkt := txn.Bucket(testBktName)
+
+			for _, kv := range testSortedListStr {
+				if err = bkt.Put(kv.Val, kv.Val); err != nil {
+					return
+				}
+			}
+
+			return
+		}); err != nil {
+			b.Fatal(err)
+		}
 	}
 
 	b.ReportAllocs()
