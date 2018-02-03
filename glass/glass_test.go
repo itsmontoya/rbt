@@ -1,13 +1,12 @@
 package glass
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"testing"
 
 	"github.com/boltDB/bolt"
-	"github.com/missionMeteora/bmdb"
-	"github.com/szferi/gomdb"
 
 	"github.com/itsmontoya/whiskey/testUtils"
 	"github.com/missionMeteora/toolkit/errors"
@@ -120,6 +119,50 @@ func TestGlass(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestPut(t *testing.T) {
+	var (
+		g   *Glass
+		err error
+	)
+
+	if err = os.MkdirAll("testing", 0755); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll("testing")
+
+	if g, err = New("testing", "test_put"); err != nil {
+		t.Fatal(err)
+	}
+	defer g.Close()
+
+	for _, kv := range testSortedListStr {
+		if err = g.Update(func(txn *Txn) (err error) {
+			var bkt *Bucket
+			if bkt, err = txn.CreateBucket(testBktName); err != nil {
+				return
+			}
+
+			if err = bkt.Put(kv.Val, kv.Val); err != nil {
+				return
+			}
+
+			var val []byte
+			if val, err = bkt.Get(kv.Val); err != nil {
+				return
+			}
+
+			if !bytes.Equal(kv.Val, val) {
+				t.Fatalf("invalid value, expected \"%s\" and received \"%s\"", string(kv.Val), string(val))
+			}
+
+			return
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
 }
 
 func BenchmarkWhiskeyGet(b *testing.B) {
@@ -361,117 +404,6 @@ func BenchmarkBoltBatchPut(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		if err = db.Update(func(txn *bolt.Tx) (err error) {
-			bkt := txn.Bucket(testBktName)
-
-			for _, kv := range testSortedListStr {
-				if err = bkt.Put(kv.Val, kv.Val); err != nil {
-					return
-				}
-			}
-
-			return
-		}); err != nil {
-			b.Fatal(err)
-		}
-	}
-
-	b.ReportAllocs()
-}
-
-func BenchmarkLMDBBatchPut(b *testing.B) {
-	var (
-		env *mdb.Env
-		err error
-	)
-
-	if err = os.MkdirAll("testing/mdb", 0755); err != nil {
-		b.Fatal(err)
-	}
-	defer os.RemoveAll("testing")
-
-	//if _, err = os.OpenFile("testing/mdb", os.O_CREATE|os.O_RDWR, 0644); err != nil {
-	//	b.Fatal(err)
-	//}
-
-	if env, err = mdb.NewEnv(); err != nil {
-		b.Fatal(err)
-	}
-
-	env.SetMapSize(1 << 20) // max file size
-	env.SetMaxDBs(mdb.DBI(12))
-
-	if err = env.Open("testing/mdb", 0, 0664); err != nil {
-		b.Fatal(err)
-	}
-	defer env.Close()
-
-	txn, err := env.BeginTxn(nil, 0)
-	if err != nil {
-		b.Fatal(err)
-	}
-
-	dbin := string(testBktName)
-	dbi, err := txn.DBIOpen(&dbin, mdb.CREATE)
-	if err != nil {
-		b.Fatal(err)
-	}
-	defer env.DBIClose(dbi)
-	if err = txn.Commit(); err != nil {
-		b.Fatal(err)
-	}
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		txn, err := env.BeginTxn(nil, 0)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		dbin = string(testBktName)
-		dbi, err := txn.DBIOpen(&dbin, 0)
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		for _, kv := range testSortedListStr {
-			if err = txn.Put(dbi, kv.Val, kv.Val, 0); err != nil {
-				b.Fatal(err)
-			}
-		}
-
-		env.DBIClose(dbi)
-		txn.Commit()
-	}
-
-	b.ReportAllocs()
-}
-
-func BenchmarkBMDBBatchPut(b *testing.B) {
-	var (
-		db  *bmdb.DB
-		err error
-	)
-
-	if err = os.MkdirAll("testing", 0755); err != nil {
-		b.Fatal(err)
-	}
-	defer os.RemoveAll("testing")
-
-	if db, err = bmdb.Open("testing/benchmarks.bdb", 0644, nil); err != nil {
-		b.Fatal(err)
-	}
-	defer db.Close()
-
-	if err = db.Update(func(txn *bmdb.Tx) (err error) {
-		_, err = txn.CreateBucket(testBktName)
-		return
-	}); err != nil {
-		b.Fatal(err)
-	}
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		if err = db.Update(func(txn *bmdb.Tx) (err error) {
 			bkt := txn.Bucket(testBktName)
 
 			for _, kv := range testSortedListStr {
