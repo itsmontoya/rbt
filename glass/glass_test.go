@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/bmatsuo/lmdb-go/lmdb"
 	"github.com/boltDB/bolt"
 
 	"github.com/itsmontoya/whiskey/testUtils"
@@ -408,6 +409,168 @@ func BenchmarkBoltBatchPut(b *testing.B) {
 
 			for _, kv := range testSortedListStr {
 				if err = bkt.Put(kv.Val, kv.Val); err != nil {
+					return
+				}
+			}
+
+			return
+		}); err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	b.ReportAllocs()
+}
+
+func BenchmarkLMDBGet(b *testing.B) {
+	var (
+		env *lmdb.Env
+		err error
+
+		testBktNameStr = string(testBktName)
+	)
+
+	if err = os.MkdirAll("testing", 0755); err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll("testing")
+
+	if env, err = lmdb.NewEnv(); err != nil {
+		b.Fatal(err)
+	}
+	defer env.Close()
+
+	if err = env.SetMaxDBs(3); err != nil {
+		b.Fatal(err)
+	}
+
+	if err = env.Update(func(txn *lmdb.Txn) (err error) {
+		var bkt lmdb.DBI
+		if bkt, err = txn.CreateDBI(testBktNameStr); err != nil {
+			return
+		}
+
+		for _, kv := range testSortedListStr {
+			if err = txn.Put(bkt, kv.Val, kv.Val, 0); err != nil {
+				return
+			}
+		}
+
+		return
+	}); err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, kv := range testSortedListStr {
+			if err = env.Update(func(txn *lmdb.Txn) (err error) {
+				var bkt lmdb.DBI
+				if bkt, err = txn.OpenDBI(testBktNameStr, 0); err != nil {
+					return
+				}
+
+				if testVal, err = txn.Get(bkt, kv.Val); err != nil {
+					return
+				}
+
+				return
+			}); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+
+	b.ReportAllocs()
+}
+
+func BenchmarkLMDBPut(b *testing.B) {
+	var (
+		env *lmdb.Env
+		err error
+
+		testBktNameStr = string(testBktName)
+	)
+
+	if err = os.MkdirAll("testing", 0755); err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll("testing")
+
+	if env, err = lmdb.NewEnv(); err != nil {
+		b.Fatal(err)
+	}
+	defer env.Close()
+
+	if err = env.SetMaxDBs(3); err != nil {
+		b.Fatal(err)
+	}
+
+	if err = env.Update(func(txn *lmdb.Txn) (err error) {
+		_, err = txn.CreateDBI(testBktNameStr)
+		return
+	}); err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, kv := range testSortedListStr {
+			if err = env.Update(func(txn *lmdb.Txn) (err error) {
+				var bkt lmdb.DBI
+				if bkt, err = txn.OpenDBI(testBktNameStr, 0); err != nil {
+					return
+				}
+
+				return txn.Put(bkt, kv.Val, kv.Val, 0)
+			}); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+
+	b.ReportAllocs()
+}
+
+func BenchmarkLMDBBatchPut(b *testing.B) {
+	var (
+		env *lmdb.Env
+		err error
+
+		testBktNameStr = string(testBktName)
+	)
+
+	if err = os.MkdirAll("testing", 0755); err != nil {
+		b.Fatal(err)
+	}
+	defer os.RemoveAll("testing")
+
+	if env, err = lmdb.NewEnv(); err != nil {
+		b.Fatal(err)
+	}
+	defer env.Close()
+
+	if err = env.SetMaxDBs(3); err != nil {
+		b.Fatal(err)
+	}
+
+	if err = env.Update(func(txn *lmdb.Txn) (err error) {
+		_, err = txn.CreateDBI(testBktNameStr)
+		return
+	}); err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		if err = env.Update(func(txn *lmdb.Txn) (err error) {
+			var bkt lmdb.DBI
+			if bkt, err = txn.OpenDBI(testBktNameStr, 0); err != nil {
+				return
+			}
+
+			for _, kv := range testSortedListStr {
+				if err = txn.Put(bkt, kv.Val, kv.Val, 0); err != nil {
 					return
 				}
 			}
