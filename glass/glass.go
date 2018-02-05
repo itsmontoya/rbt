@@ -1,7 +1,7 @@
 package glass
 
 import (
-	"github.com/Path94/atoms"
+	"github.com/PathDNA/atoms"
 	"github.com/itsmontoya/whiskey"
 	"github.com/missionMeteora/toolkit/errors"
 )
