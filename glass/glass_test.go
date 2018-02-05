@@ -438,11 +438,15 @@ func BenchmarkLMDBGet(b *testing.B) {
 	if env, err = lmdb.NewEnv(); err != nil {
 		b.Fatal(err)
 	}
-	defer env.Close()
 
 	if err = env.SetMaxDBs(3); err != nil {
 		b.Fatal(err)
 	}
+
+	if err = env.Open("testing", 0, 0644); err != nil {
+		b.Fatal(err)
+	}
+	defer env.Close()
 
 	if err = env.Update(func(txn *lmdb.Txn) (err error) {
 		var bkt lmdb.DBI
@@ -500,11 +504,15 @@ func BenchmarkLMDBPut(b *testing.B) {
 	if env, err = lmdb.NewEnv(); err != nil {
 		b.Fatal(err)
 	}
-	defer env.Close()
 
 	if err = env.SetMaxDBs(3); err != nil {
 		b.Fatal(err)
 	}
+
+	if err = env.Open("testing", 0, 0644); err != nil {
+		b.Fatal(err)
+	}
+	defer env.Close()
 
 	if err = env.Update(func(txn *lmdb.Txn) (err error) {
 		_, err = txn.CreateDBI(testBktNameStr)
@@ -548,11 +556,15 @@ func BenchmarkLMDBBatchPut(b *testing.B) {
 	if env, err = lmdb.NewEnv(); err != nil {
 		b.Fatal(err)
 	}
-	defer env.Close()
 
 	if err = env.SetMaxDBs(3); err != nil {
 		b.Fatal(err)
 	}
+
+	if err = env.Open("testing", 0, 0644); err != nil {
+		b.Fatal(err)
+	}
+	defer env.Close()
 
 	if err = env.Update(func(txn *lmdb.Txn) (err error) {
 		_, err = txn.CreateDBI(testBktNameStr)
