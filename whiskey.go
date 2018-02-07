@@ -611,6 +611,23 @@ func (w *Whiskey) adoptChildren(in, out *Block) {
 	out.children[1] = -1
 }
 
+func (w *Whiskey) hasBlackChildpair(b *Block) bool {
+	if b == nil {
+		return false
+	}
+
+	var c *Block
+	if c = w.getBlock(b.children[0]); c != nil && c.c == colorRed {
+		return false
+	}
+
+	if c = w.getBlock(b.children[1]); c != nil && c.c == colorRed {
+		return false
+	}
+
+	return true
+}
+
 func (w *Whiskey) zeroChildrenDelete(b, parent *Block) {
 	if parent == nil {
 		return
@@ -630,21 +647,7 @@ func (w *Whiskey) oneChildDelete(b, parent *Block) (next *Block) {
 		next = w.getBlock(b.children[1])
 	}
 
-	w.adoptChildren(next, b)
-	w.detachFromParent(next)
-	// Set next-block childtype as the block childtype
-	next.ct = b.ct
-	// Set the next-block parent as the block parent
-	next.parent = b.parent
-
-	// Set child as the replacement child within the parent
-	// Note: At this point, our block becomes an orphan
-	if b.ct == childLeft {
-		parent.children[0] = next.offset
-	} else {
-		parent.children[1] = next.offset
-	}
-
+	w.replace(b, next, parent)
 	return
 }
 
@@ -654,21 +657,28 @@ func (w *Whiskey) twoChildDelete(b, parent *Block) (next *Block) {
 	// Calling getHead from this location will land us at the item directly
 	// following the target block.
 	next = w.getBlock(w.getHead(b.children[1]))
-	w.adoptChildren(next, b)
-	w.detachFromParent(next)
+	w.replace(b, next, parent)
+	return
+}
+
+func (w *Whiskey) replace(old, new, parent *Block) {
+	w.adoptChildren(new, old)
+	w.detachFromParent(new)
 	// Set next-block childtype as the block childtype
-	next.ct = b.ct
+	new.ct = old.ct
 	// Set the next-block parent as the block parent
-	next.parent = b.parent
+	new.parent = old.parent
 
 	// Set the parent's child value as the offset to our next block
-	if b.ct == childLeft {
-		parent.children[0] = next.offset
-	} else if b.ct == childRight {
-		parent.children[1] = next.offset
+	if old.ct == childLeft {
+		parent.children[0] = new.offset
+	} else if old.ct == childRight {
+		parent.children[1] = new.offset
+	} else {
+		// If block is root, we need to update the label's reference to root
+		w.l.root = new.offset
 	}
 
-	return
 }
 
 // Delete will remove an item from the tree
@@ -711,12 +721,31 @@ func (w *Whiskey) Delete(key []byte) {
 	}
 
 	var sibling *Block
+	// Acquire sibling
 	switch {
-	case next == nil:
+	case b.ct == childRoot:
 
-	case next.ct == childRoot:
-	case next.ct == childLeft:
-	case next.ct == childRight:
+	case b.ct == childLeft:
+		sibling = w.getBlock(parent.children[1])
+	case b.ct == childRight:
+		sibling = w.getBlock(parent.children[0])
+	}
+
+	// Set sibling black state
+	// Note: We can eventually remove this for performance reasons once this function
+	// is completely fleshed out. We need to ensure that we are not dealing with a nil sibling
+	// This is just to avoid running into panic land
+	sib := isBlack(sibling)
+
+	// Sibling rotate bonanza
+	switch {
+	case sib && w.hasBlackChildpair(sibling):
+		// Sibling is black and has both black children
+	case sib:
+		// Sibling is black and has at least one red child
+	default:
+		// Sibling is red
+		//	case sib &&:
 	}
 
 	// Complex Case: If Both u and v are Black.
@@ -790,4 +819,20 @@ func (w *Whiskey) Close() (err error) {
 	}
 
 	return w.cfn()
+}
+
+func isBlack(b *Block) bool {
+	if b == nil {
+		return true
+	}
+
+	return b.c == colorBlack
+}
+
+func isRed(b *Block) bool {
+	if b == nil {
+		return false
+	}
+
+	return b.c == colorRed
 }
