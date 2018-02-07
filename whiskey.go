@@ -624,6 +624,8 @@ func (w *Whiskey) oneChildDelete(b *Block) (next *Block) {
 func (w *Whiskey) twoChildDelete(b *Block) (next *Block) {
 	next = w.getBlock(w.getHead(b.children[1]))
 	// Set next element's childrent as our block's children
+	// Note: We know that our next block does not have children.
+	// This is because a branch head is always a leaf.
 	next.children[0] = b.children[0]
 	next.children[1] = b.children[1]
 
