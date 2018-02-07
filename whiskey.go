@@ -582,31 +582,60 @@ func (w *Whiskey) Put(key, val []byte) {
 	w.l.cnt++
 }
 
-func (w *Whiskey) zeroChildrenDelete(b *Block) {
-	pb := w.getBlock(b.parent)
-	if pb == nil {
-		// Parent block is nil, return
+// detachFromParent will detach a block from it's parent reference
+// Note: This is never called on root node, parent will always exist
+func (w *Whiskey) detachFromParent(b *Block) {
+	// Get the parent of block
+	parent := w.getBlock(b.parent)
+	// Set parent's child value for -1 where the block resided
+	if parent.ct == childLeft {
+		parent.children[0] = -1
+	} else if parent.ct == childRight {
+		parent.children[1] = -1
+	}
+}
+
+// adoptChildren will set in-block children as out-block children
+func (w *Whiskey) adoptChildren(in, out *Block) {
+	// Set children of in-block to match the children of the out-block
+	// Note: The in-block will always be a leaf. As a result, we know
+	// that our next block does not have children.
+	in.children[0] = out.children[0]
+	in.children[1] = out.children[1]
+
+	// Set children of out to nil values
+	// Note: This technically isn't needed as the out block will be destoyed after this call
+	// We could technically sqeeze out some more performance by avoiding two unnecessary write calls.
+	// Consider removing this when going through the hyper-optimization phase
+	out.children[0] = -1
+	out.children[1] = -1
+}
+
+func (w *Whiskey) zeroChildrenDelete(b, parent *Block) {
+	if parent == nil {
 		return
 	}
 	// Set reference to block in parent to -1
 	if b.ct == childLeft {
-		pb.children[0] = -1
+		parent.children[0] = -1
 	} else {
-		pb.children[1] = -1
+		parent.children[1] = -1
 	}
 }
 
-func (w *Whiskey) oneChildDelete(b *Block) (next *Block) {
-	var parent *Block
+func (w *Whiskey) oneChildDelete(b, parent *Block) (next *Block) {
 	if b.children[0] != -1 {
 		next = w.getBlock(b.children[0])
 	} else {
 		next = w.getBlock(b.children[1])
 	}
 
-	if parent = w.getBlock(b.parent); parent == nil {
-		return
-	}
+	w.adoptChildren(next, b)
+	w.detachFromParent(next)
+	// Set next-block childtype as the block childtype
+	next.ct = b.ct
+	// Set the next-block parent as the block parent
+	next.parent = b.parent
 
 	// Set child as the replacement child within the parent
 	// Note: At this point, our block becomes an orphan
@@ -616,39 +645,27 @@ func (w *Whiskey) oneChildDelete(b *Block) (next *Block) {
 		parent.children[1] = next.offset
 	}
 
-	// Set parent as child's new parent
-	next.parent = parent.offset
 	return
 }
 
-func (w *Whiskey) twoChildDelete(b *Block) (next *Block) {
+func (w *Whiskey) twoChildDelete(b, parent *Block) (next *Block) {
+	// Get the very next element following block
+	// Note: Selecting the second child will ensure we move forward.
+	// Calling getHead from this location will land us at the item directly
+	// following the target block.
 	next = w.getBlock(w.getHead(b.children[1]))
-	// Set next element's childrent as our block's children
-	// Note: We know that our next block does not have children.
-	// This is because a branch head is always a leaf.
-	next.children[0] = b.children[0]
-	next.children[1] = b.children[1]
-
-	// Get the parent of the next block
-	np := w.getBlock(next.parent)
-	// Set np's child value for -1 where the next block resided
-	if next.ct == childLeft {
-		np.children[0] = -1
-	} else if next.ct == childRight {
-		np.children[1] = -1
-	}
-
-	// Set next to match childtype and parent offset to our block
+	w.adoptChildren(next, b)
+	w.detachFromParent(next)
+	// Set next-block childtype as the block childtype
 	next.ct = b.ct
+	// Set the next-block parent as the block parent
 	next.parent = b.parent
 
-	// Get the parent of our block
-	p := w.getBlock(b.parent)
 	// Set the parent's child value as the offset to our next block
 	if b.ct == childLeft {
-		p.children[0] = next.offset
+		parent.children[0] = next.offset
 	} else if b.ct == childRight {
-		p.children[1] = next.offset
+		parent.children[1] = next.offset
 	}
 
 	return
@@ -667,29 +684,39 @@ func (w *Whiskey) Delete(key []byte) {
 	}
 
 	b = w.getBlock(offset)
+	parent := w.getBlock(b.parent)
 	hasLeft := b.children[0] != -1
 	hasRight := b.children[1] != -1
 	// BST Delete switch
 	switch {
 	case hasLeft && hasRight:
-		next = w.twoChildDelete(b)
+		next = w.twoChildDelete(b, parent)
 
 	case !hasLeft && !hasRight:
-		w.zeroChildrenDelete(b)
+		w.zeroChildrenDelete(b, parent)
 
 	default:
 		// Technically this is out of order, but it seems much more clean to check to see
 		// if we have ALL or NONE. If neither cases exist, we know we have one child
-		next = w.oneChildDelete(b)
+		next = w.oneChildDelete(b, parent)
 
 	}
 
 	// Balancing cases
-	if b.c == colorRed || next.c == colorRed {
+	if b.c == colorRed || (next != nil && next.c == colorRed) {
 		// Simple Case: If either u or v is red
 		// Note: Because we are not disrupting the black-level, no rotation is needed
 		next.c = colorBlack
 		return
+	}
+
+	var sibling *Block
+	switch {
+	case next == nil:
+
+	case next.ct == childRoot:
+	case next.ct == childLeft:
+	case next.ct == childRight:
 	}
 
 	// Complex Case: If Both u and v are Black.
