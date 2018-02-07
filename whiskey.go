@@ -582,6 +582,120 @@ func (w *Whiskey) Put(key, val []byte) {
 	w.l.cnt++
 }
 
+func (w *Whiskey) zeroChildrenDelete(b *Block) {
+	pb := w.getBlock(b.parent)
+	if pb == nil {
+		// Parent block is nil, return
+		return
+	}
+	// Set reference to block in parent to -1
+	if b.ct == childLeft {
+		pb.children[0] = -1
+	} else {
+		pb.children[1] = -1
+	}
+}
+
+func (w *Whiskey) oneChildDelete(b *Block) (next *Block) {
+	var parent *Block
+	if b.children[0] != -1 {
+		next = w.getBlock(b.children[0])
+	} else {
+		next = w.getBlock(b.children[1])
+	}
+
+	if parent = w.getBlock(b.parent); parent == nil {
+		return
+	}
+
+	// Set child as the replacement child within the parent
+	// Note: At this point, our block becomes an orphan
+	if b.ct == childLeft {
+		parent.children[0] = next.offset
+	} else {
+		parent.children[1] = next.offset
+	}
+
+	// Set parent as child's new parent
+	next.parent = parent.offset
+	return
+}
+
+func (w *Whiskey) twoChildDelete(b *Block) (next *Block) {
+	next = w.getBlock(w.getHead(b.children[1]))
+	// Set next element's childrent as our block's children
+	next.children[0] = b.children[0]
+	next.children[1] = b.children[1]
+
+	// Get the parent of the next block
+	np := w.getBlock(next.parent)
+	// Set np's child value for -1 where the next block resided
+	if next.ct == childLeft {
+		np.children[0] = -1
+	} else if next.ct == childRight {
+		np.children[1] = -1
+	}
+
+	// Set next to match childtype and parent offset to our block
+	next.ct = b.ct
+	next.parent = b.parent
+
+	// Get the parent of our block
+	p := w.getBlock(b.parent)
+	// Set the parent's child value as the offset to our next block
+	if b.ct == childLeft {
+		p.children[0] = next.offset
+	} else if b.ct == childRight {
+		p.children[1] = next.offset
+	}
+
+	return
+}
+
+// Delete will remove an item from the tree
+func (w *Whiskey) Delete(key []byte) {
+	var (
+		b      *Block
+		next   *Block
+		offset int64
+	)
+
+	if offset, _ = w.seekBlock(w.l.root, key, false); offset == -1 {
+		return
+	}
+
+	b = w.getBlock(offset)
+	hasLeft := b.children[0] != -1
+	hasRight := b.children[1] != -1
+	// BST Delete switch
+	switch {
+	case hasLeft && hasRight:
+		next = w.twoChildDelete(b)
+
+	case !hasLeft && !hasRight:
+		w.zeroChildrenDelete(b)
+
+	default:
+		// Technically this is out of order, but it seems much more clean to check to see
+		// if we have ALL or NONE. If neither cases exist, we know we have one child
+		next = w.oneChildDelete(b)
+
+	}
+
+	// Balancing cases
+	if b.c == colorRed || next.c == colorRed {
+		// Simple Case: If either u or v is red
+		// Note: Because we are not disrupting the black-level, no rotation is needed
+		next.c = colorBlack
+		return
+	}
+
+	// Complex Case: If Both u and v are Black.
+	// Here we go..
+	// TODO: Balance
+	return
+}
+
 // ForEach will iterate through each tree item
 func (w *Whiskey) ForEach(fn ForEachFn) (ended bool) {
 	if w.l.root == -1 {
