@@ -628,6 +628,23 @@ func (w *Whiskey) hasBlackChildpair(b *Block) bool {
 	return true
 }
 
+func (w *Whiskey) hasRedChildpair(b *Block) bool {
+	if b == nil {
+		return false
+	}
+
+	var c *Block
+	if c = w.getBlock(b.children[0]); c != nil && c.c == colorBlack {
+		return false
+	}
+
+	if c = w.getBlock(b.children[1]); c != nil && c.c == colorBlack {
+		return false
+	}
+
+	return true
+}
+
 func (w *Whiskey) zeroChildrenDelete(b, parent *Block) {
 	if parent == nil {
 		return
@@ -735,17 +752,41 @@ func (w *Whiskey) Delete(key []byte) {
 	// Note: We can eventually remove this for performance reasons once this function
 	// is completely fleshed out. We need to ensure that we are not dealing with a nil sibling
 	// This is just to avoid running into panic land
-	sib := isBlack(sibling)
+	siblingIsBlack := isBlack(sibling)
+	leftNephew := w.getBlock(sibling.children[0])
+	rightNephew := w.getBlock(sibling.children[1])
 
 	// Sibling rotate bonanza
 	switch {
-	case sib && w.hasBlackChildpair(sibling):
-		// Sibling is black and has both black children
-	case sib:
-		// Sibling is black and has at least one red child
+	// Sibling is black and has both black children
+	case siblingIsBlack && (isBlack(leftNephew) && isBlack(rightNephew)):
+
+	// Sibling is black and has at least one red child
+	case siblingIsBlack:
+		// Rotation cases:
+		switch {
+		// 1. Left Left Case (s is left child of its parent and r is left child of s or both children of s are red).
+		case sibling.ct == childLeft && isRed(leftNephew):
+
+		// 2. Left Right Case (s is left child of its parent and r is right child).
+		case sibling.ct == childLeft && isRed(rightNephew):
+			// Left rotate
+			w.leftRotate(rightNephew)
+			// Rotate right
+			w.rightRotate(rightNephew)
+		// 3. Right Right Case (s is right child of its parent and r is right child of s or both children of s are red)
+		case sibling.ct == childRight && isRed(rightNephew):
+
+		// 4. Right Left Case (s is right child of its parent and r is left child of s)
+		case sibling.ct == childRight && isRed(leftNephew):
+			// Rotate right
+			w.rightRotate(leftNephew)
+			// Left rotate
+			w.leftRotate(leftNephew)
+		}
+
+	// Sibling is red
 	default:
-		// Sibling is red
-		//	case sib &&:
 	}
 
 	// Complex Case: If Both u and v are Black.
