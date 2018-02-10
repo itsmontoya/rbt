@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"unsafe"
 
+	"github.com/missionMeteora/journaler"
+
 	"github.com/missionMeteora/toolkit/errors"
 )
 
@@ -15,6 +17,7 @@ const (
 const (
 	colorBlack color = iota
 	colorRed
+	colorDoubleBlack
 )
 
 const (
@@ -647,6 +650,9 @@ func (w *Whiskey) hasRedChildpair(b *Block) bool {
 
 func (w *Whiskey) zeroChildrenDelete(b, parent *Block) {
 	if parent == nil {
+		// If we are root and have no children, we can effectively set the DB to a 0 state
+		w.l.root = -1
+		w.l.tail = labelSize
 		return
 	}
 	// Set reference to block in parent to -1
@@ -658,12 +664,21 @@ func (w *Whiskey) zeroChildrenDelete(b, parent *Block) {
 }
 
 func (w *Whiskey) oneChildDelete(b, parent *Block) (next *Block) {
-	if b.children[0] != -1 {
-		next = w.getBlock(b.children[0])
-	} else {
+	if b.children[1] != -1 {
 		next = w.getBlock(b.children[1])
+	} else {
+		next = w.getBlock(b.children[0])
 	}
 
+	if parent == nil {
+		// If we are the root and and only have one child, the child becomes root
+		w.l.root = next.offset
+		next.parent = -1
+		next.ct = childRoot
+		return
+	}
+
+	journaler.Debug("One child")
 	w.replace(b, next, parent)
 	return
 }
@@ -674,11 +689,13 @@ func (w *Whiskey) twoChildDelete(b, parent *Block) (next *Block) {
 	// Calling getHead from this location will land us at the item directly
 	// following the target block.
 	next = w.getBlock(w.getHead(b.children[1]))
+	journaler.Debug("Two child")
 	w.replace(b, next, parent)
 	return
 }
 
 func (w *Whiskey) replace(old, new, parent *Block) {
+	journaler.Debug("Replacing! %v / %v", old, new)
 	w.adoptChildren(new, old)
 	w.detachFromParent(new)
 	// Set next-block childtype as the block childtype
@@ -696,6 +713,99 @@ func (w *Whiskey) replace(old, new, parent *Block) {
 		w.l.root = new.offset
 	}
 
+}
+
+func (w *Whiskey) deleteBalance(b, parent *Block) {
+	if b.c != colorDoubleBlack {
+		return
+	}
+
+	if b.ct == childRoot {
+		b.c = colorBlack
+		return
+	}
+
+	var sibling *Block
+	// Acquire sibling
+	switch {
+	case b.ct == childLeft:
+		sibling = w.getBlock(parent.children[1])
+	case b.ct == childRight:
+		sibling = w.getBlock(parent.children[0])
+	case b.ct == childRoot:
+		b.c = colorBlack
+		return
+	}
+
+	// Set sibling black state
+	// Note: We can eventually remove this for performance reasons once this function
+	// is completely fleshed out. We need to ensure that we are not dealing with a nil sibling
+	// This is just to avoid running into panic land
+	siblingIsBlack := isBlack(sibling)
+	var leftNephew, rightNephew *Block
+	if sibling != nil {
+		leftNephew = w.getBlock(sibling.children[0])
+		rightNephew = w.getBlock(sibling.children[1])
+	}
+
+	// Sibling rotate bonanza
+	switch {
+	// Sibling is black and has both black children
+	case siblingIsBlack && (isBlack(leftNephew) && isBlack(rightNephew)):
+		if sibling != nil {
+			sibling.c = colorRed
+		}
+
+		if parent.c == colorRed {
+			parent.c = colorBlack
+			return
+		} else if parent.c == colorBlack {
+			parent.c = colorDoubleBlack
+			w.deleteBalance(parent, w.getBlock(parent.parent))
+		}
+
+	// Sibling is black and has at least one red child
+	case siblingIsBlack:
+		// Rotation cases:
+		switch {
+		// 1. Left Left Case (s is left child of its parent and r is left child of s or both children of s are red).
+		case sibling.ct == childLeft && isRed(leftNephew):
+			// Left rotate sibling
+			w.leftRotate(sibling)
+
+		// 2. Left Right Case (s is left child of its parent and r is right child).
+		case sibling.ct == childLeft && isRed(rightNephew):
+			// Left rotate right nephew
+			w.leftRotate(rightNephew)
+			// Right rotate right nephew
+			w.rightRotate(rightNephew)
+
+			// Note: Sibling is now left nephew and right nephew is now sibling
+
+		// 3. Right Right Case (s is right child of its parent and r is right child of s or both children of s are red)
+		case sibling.ct == childRight && isRed(rightNephew):
+			w.rightRotate(sibling)
+
+		// 4. Right Left Case (s is right child of its parent and r is left child of s)
+		case sibling.ct == childRight && isRed(leftNephew):
+			// Right rotate left nephew
+			w.rightRotate(leftNephew)
+			// Left rotate left nephew
+			w.leftRotate(leftNephew)
+
+			// Note: Sibling is now right nephew and left nephew is now sibling
+		}
+
+	// Sibling is red
+	default:
+		if sibling.ct == childLeft {
+			w.rightRotate(sibling)
+		} else if sibling.ct == childRight {
+			w.leftRotate(sibling)
+		}
+	}
+
+	b.c = colorBlack
 }
 
 // Delete will remove an item from the tree
@@ -721,7 +831,8 @@ func (w *Whiskey) Delete(key []byte) {
 
 	case !hasLeft && !hasRight:
 		w.zeroChildrenDelete(b, parent)
-
+		// We are just using this as a placeholder for next
+		next = b
 	default:
 		// Technically this is out of order, but it seems much more clean to check to see
 		// if we have ALL or NONE. If neither cases exist, we know we have one child
@@ -730,68 +841,15 @@ func (w *Whiskey) Delete(key []byte) {
 	}
 
 	// Balancing cases
-	if b.c == colorRed || (next != nil && next.c == colorRed) {
+	if b.c == colorRed || next.c == colorRed {
 		// Simple Case: If either u or v is red
 		// Note: Because we are not disrupting the black-level, no rotation is needed
 		next.c = colorBlack
 		return
 	}
 
-	var sibling *Block
-	// Acquire sibling
-	switch {
-	case b.ct == childRoot:
-
-	case b.ct == childLeft:
-		sibling = w.getBlock(parent.children[1])
-	case b.ct == childRight:
-		sibling = w.getBlock(parent.children[0])
-	}
-
-	// Set sibling black state
-	// Note: We can eventually remove this for performance reasons once this function
-	// is completely fleshed out. We need to ensure that we are not dealing with a nil sibling
-	// This is just to avoid running into panic land
-	siblingIsBlack := isBlack(sibling)
-	leftNephew := w.getBlock(sibling.children[0])
-	rightNephew := w.getBlock(sibling.children[1])
-
-	// Sibling rotate bonanza
-	switch {
-	// Sibling is black and has both black children
-	case siblingIsBlack && (isBlack(leftNephew) && isBlack(rightNephew)):
-
-	// Sibling is black and has at least one red child
-	case siblingIsBlack:
-		// Rotation cases:
-		switch {
-		// 1. Left Left Case (s is left child of its parent and r is left child of s or both children of s are red).
-		case sibling.ct == childLeft && isRed(leftNephew):
-
-		// 2. Left Right Case (s is left child of its parent and r is right child).
-		case sibling.ct == childLeft && isRed(rightNephew):
-			// Left rotate
-			w.leftRotate(rightNephew)
-			// Rotate right
-			w.rightRotate(rightNephew)
-		// 3. Right Right Case (s is right child of its parent and r is right child of s or both children of s are red)
-		case sibling.ct == childRight && isRed(rightNephew):
-
-		// 4. Right Left Case (s is right child of its parent and r is left child of s)
-		case sibling.ct == childRight && isRed(leftNephew):
-			// Rotate right
-			w.rightRotate(leftNephew)
-			// Left rotate
-			w.leftRotate(leftNephew)
-		}
-
-	// Sibling is red
-	default:
-	}
-
-	// Complex Case: If Both u and v are Black.
-	// Here we go..
-	// TODO: Balance
+	next.c = colorDoubleBlack
+	w.deleteBalance(next, parent)
 	return
 }
 

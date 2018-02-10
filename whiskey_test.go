@@ -36,6 +36,60 @@ func TestForEach(t *testing.T) {
 	})
 }
 
+func TestRootDelete(t *testing.T) {
+	w := New(1024)
+	k := []byte("hello")
+	v := []byte("world")
+	w.Put(k, v)
+
+	if val := string(w.Get(k)); val != string(v) {
+		t.Fatalf("invalid value, expected \"%s\" and received \"%s\"", string(v), val)
+	}
+
+	w.Delete(k)
+
+	if val := string(w.Get(k)); len(val) != 0 {
+		t.Fatalf("invalid value, expected \"%s\" and received \"%s\"", "", val)
+	}
+}
+
+func TestDelete(t *testing.T) {
+	keys := [][]byte{
+		[]byte("1"),
+		[]byte("2"),
+		//		[]byte("3"),
+		//		[]byte("4"),
+		//		[]byte("5"),
+		//		[]byte("6"),
+		//		[]byte("7"),
+		//		[]byte("8"),
+		//		[]byte("9"),
+		//		[]byte("10"),
+	}
+	w := New(1024)
+
+	for _, key := range keys {
+		w.Put(key, key)
+
+		if val := string(w.Get(key)); val != string(key) {
+			t.Fatalf("invalid value, expected \"%s\" and received \"%s\"", string(key), val)
+		}
+	}
+
+	for _, key := range keys {
+		journaler.Debug("Delete time: %s", string(key))
+		if val := string(w.Get(key)); val != string(key) {
+			t.Fatalf("invalid value, expected \"%s\" and received \"%s\"", string(key), val)
+		}
+
+		w.Delete(key)
+
+		if val := string(w.Get(key)); len(val) != 0 {
+			t.Fatalf("invalid value, expected \"%s\" and received \"%s\"", "", val)
+		}
+	}
+}
+
 func TestGrow(t *testing.T) {
 	w := New(1024)
 	k := []byte("hello")
