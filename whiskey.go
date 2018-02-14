@@ -696,16 +696,20 @@ func (w *Whiskey) twoChildDelete(b, parent *Block) (next *Block) {
 	// following the target block.
 	next = w.getBlock(w.getHead(b.children[1]))
 
-	//	w.adoptChildren(next, b)
 	if next.offset != b.children[1] {
+		// Our next item is not the direct child of our target block, let's have our next block's parent adopt the orphan
+		// Note: If the child doesn't exist, the offset of -1 will be applied as the orphan reference
 		var coffset int64 = -1
 		if child = w.getBlock(next.children[1]); child != nil {
+			// Child exists, set child offset
 			coffset = child.offset
 			child.parent = next.parent
 		}
 
 		nextParent := w.getBlock(next.parent)
+		// Have next parent adopt the orphan
 		nextParent.children[0] = coffset
+		// Detach next from it's parent
 		next.parent = -1
 
 		next.children[1] = b.children[1]
