@@ -886,7 +886,6 @@ func (w *Whiskey) Delete(key []byte) {
 		next.c = colorDoubleBlack
 	}
 
-	//return
 	w.deleteBalance(next, parent)
 
 	root := w.getBlock(w.l.root)
