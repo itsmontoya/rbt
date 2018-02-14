@@ -4,3 +4,7 @@ testing/profiling/profiling
 *.pdf
 *.db
 *.txt
+yarn.lock
+yarn-error.log
+yarn-integrity
+node_modules
