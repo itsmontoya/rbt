@@ -1,0 +1,12 @@
+{
+  "name": "whiskey_chart",
+  "version": "0.0.1",
+  "description": "A debug charting utility",
+  "main": "chart.ts",
+  "repository": "github.com/itsmontoya/whiskey",
+  "author": "itsMontoya",
+  "license": "MIT",
+  "dependencies": {
+    "utils": "github:PathDNA/utils.ts"
+  }
+}
