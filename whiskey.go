@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"unsafe"
 
-	"github.com/missionMeteora/journaler"
-
 	"github.com/missionMeteora/toolkit/errors"
 )
 
@@ -590,21 +588,48 @@ func (w *Whiskey) Put(key, val []byte) {
 func (w *Whiskey) detachFromParent(b *Block) {
 	// Get the parent of block
 	parent := w.getBlock(b.parent)
+	if parent == nil {
+		return
+	}
+
 	// Set parent's child value for -1 where the block resided
-	if parent.ct == childLeft {
+	if b.ct == childLeft {
 		parent.children[0] = -1
-	} else if parent.ct == childRight {
+	} else if b.ct == childRight {
 		parent.children[1] = -1
 	}
 }
 
 // adoptChildren will set in-block children as out-block children
 func (w *Whiskey) adoptChildren(in, out *Block) {
+	var child *Block
+	//	parent := w.getBlock(in.parent)
 	// Set children of in-block to match the children of the out-block
 	// Note: The in-block will always be a leaf. As a result, we know
 	// that our next block does not have children.
-	in.children[0] = out.children[0]
-	in.children[1] = out.children[1]
+	if out.children[0] != in.offset {
+		if child = w.getBlock(in.children[0]); child != nil {
+			child.parent = in.parent
+			in.parent = -1
+		}
+
+		in.children[0] = out.children[0]
+		if child = w.getBlock(in.children[0]); child != nil {
+			child.parent = in.offset
+		}
+	}
+
+	if out.children[1] != in.offset {
+		if child = w.getBlock(in.children[1]); child != nil {
+			child.parent = in.parent
+			in.parent = -1
+		}
+
+		in.children[1] = out.children[1]
+		if child = w.getBlock(in.children[1]); child != nil {
+			child.parent = in.offset
+		}
+	}
 
 	// Set children of out to nil values
 	// Note: This technically isn't needed as the out block will be destoyed after this call
@@ -649,18 +674,7 @@ func (w *Whiskey) hasRedChildpair(b *Block) bool {
 }
 
 func (w *Whiskey) zeroChildrenDelete(b, parent *Block) {
-	if parent == nil {
-		// If we are root and have no children, we can effectively set the DB to a 0 state
-		w.l.root = -1
-		w.l.tail = labelSize
-		return
-	}
-	// Set reference to block in parent to -1
-	if b.ct == childLeft {
-		parent.children[0] = -1
-	} else {
-		parent.children[1] = -1
-	}
+	w.replace(b, nil, parent)
 }
 
 func (w *Whiskey) oneChildDelete(b, parent *Block) (next *Block) {
@@ -670,49 +684,66 @@ func (w *Whiskey) oneChildDelete(b, parent *Block) (next *Block) {
 		next = w.getBlock(b.children[0])
 	}
 
-	if parent == nil {
-		// If we are the root and and only have one child, the child becomes root
-		w.l.root = next.offset
-		next.parent = -1
-		next.ct = childRoot
-		return
-	}
-
-	journaler.Debug("One child")
 	w.replace(b, next, parent)
 	return
 }
 
 func (w *Whiskey) twoChildDelete(b, parent *Block) (next *Block) {
+	var child *Block
 	// Get the very next element following block
 	// Note: Selecting the second child will ensure we move forward.
 	// Calling getHead from this location will land us at the item directly
 	// following the target block.
 	next = w.getBlock(w.getHead(b.children[1]))
-	journaler.Debug("Two child")
+
+	//	w.adoptChildren(next, b)
+	if next.offset != b.children[1] {
+		var coffset int64 = -1
+		if child = w.getBlock(next.children[1]); child != nil {
+			coffset = child.offset
+			child.parent = next.parent
+		}
+
+		nextParent := w.getBlock(next.parent)
+		nextParent.children[0] = coffset
+		next.parent = -1
+
+		next.children[1] = b.children[1]
+		if child = w.getBlock(next.children[1]); child != nil {
+			child.parent = next.offset
+		}
+	}
+
+	next.children[0] = b.children[0]
+	if child = w.getBlock(next.children[0]); child != nil {
+		child.parent = next.offset
+	}
+
 	w.replace(b, next, parent)
 	return
 }
 
 func (w *Whiskey) replace(old, new, parent *Block) {
-	journaler.Debug("Replacing! %v / %v", old, new)
-	w.adoptChildren(new, old)
-	w.detachFromParent(new)
-	// Set next-block childtype as the block childtype
-	new.ct = old.ct
-	// Set the next-block parent as the block parent
-	new.parent = old.parent
-
-	// Set the parent's child value as the offset to our next block
-	if old.ct == childLeft {
-		parent.children[0] = new.offset
-	} else if old.ct == childRight {
-		parent.children[1] = new.offset
-	} else {
-		// If block is root, we need to update the label's reference to root
-		w.l.root = new.offset
+	var noffset int64 = -1
+	if new != nil {
+		w.detachFromParent(new)
+		// Set next-block childtype as the block childtype
+		new.ct = old.ct
+		// Set the next-block parent as the block parent
+		new.parent = old.parent
+		noffset = new.offset
 	}
 
+	// Set the parent's child value as the offset to our next block
+	switch old.ct {
+	case childRoot:
+		// If block is root, we need to update the label's reference to root
+		w.l.root = noffset
+	case childLeft:
+		parent.children[0] = noffset
+	case childRight:
+		parent.children[1] = noffset
+	}
 }
 
 func (w *Whiskey) deleteBalance(b, parent *Block) {
@@ -770,8 +801,10 @@ func (w *Whiskey) deleteBalance(b, parent *Block) {
 		switch {
 		// 1. Left Left Case (s is left child of its parent and r is left child of s or both children of s are red).
 		case sibling.ct == childLeft && isRed(leftNephew):
-			// Left rotate sibling
-			w.leftRotate(sibling)
+			// Right rotate sibling
+			w.rightRotate(sibling)
+			// Recolor left nephew to black
+			leftNephew.c = colorBlack
 
 		// 2. Left Right Case (s is left child of its parent and r is right child).
 		case sibling.ct == childLeft && isRed(rightNephew):
@@ -784,7 +817,10 @@ func (w *Whiskey) deleteBalance(b, parent *Block) {
 
 		// 3. Right Right Case (s is right child of its parent and r is right child of s or both children of s are red)
 		case sibling.ct == childRight && isRed(rightNephew):
-			w.rightRotate(sibling)
+			// Left rotate sibling
+			w.leftRotate(sibling)
+			// Recolor right nephew to black
+			rightNephew.c = colorBlack
 
 		// 4. Right Left Case (s is right child of its parent and r is left child of s)
 		case sibling.ct == childRight && isRed(leftNephew):
@@ -824,6 +860,7 @@ func (w *Whiskey) Delete(key []byte) {
 	parent := w.getBlock(b.parent)
 	hasLeft := b.children[0] != -1
 	hasRight := b.children[1] != -1
+
 	// BST Delete switch
 	switch {
 	case hasLeft && hasRight:
@@ -845,11 +882,20 @@ func (w *Whiskey) Delete(key []byte) {
 		// Simple Case: If either u or v is red
 		// Note: Because we are not disrupting the black-level, no rotation is needed
 		next.c = colorBlack
-		return
+	} else {
+		next.c = colorDoubleBlack
 	}
 
-	next.c = colorDoubleBlack
+	//return
 	w.deleteBalance(next, parent)
+
+	root := w.getBlock(w.l.root)
+	if root != nil && root.ct != childRoot {
+		// Root has changed, update root reference to the new root
+		w.l.root = root.parent
+	}
+
+	w.l.cnt--
 	return
 }
 

@@ -2,6 +2,7 @@ package whiskey
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -54,17 +55,10 @@ func TestRootDelete(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	keys := [][]byte{
-		[]byte("1"),
-		[]byte("2"),
-		//		[]byte("3"),
-		//		[]byte("4"),
-		//		[]byte("5"),
-		//		[]byte("6"),
-		//		[]byte("7"),
-		//		[]byte("8"),
-		//		[]byte("9"),
-		//		[]byte("10"),
+	var keys [][]byte
+	// New problem threshold, 100
+	for i := 1; i <= 100; i++ {
+		keys = append(keys, []byte(strconv.Itoa(i)))
 	}
 	w := New(1024)
 
@@ -76,6 +70,11 @@ func TestDelete(t *testing.T) {
 		}
 	}
 
+	debug := GetDebug(w)
+	dbbs, _ := json.Marshal(debug)
+	fmt.Printf("BEFORE DELETE\n%s\n\n", string(dbbs))
+
+	fmt.Println("Deleting..")
 	for _, key := range keys {
 		journaler.Debug("Delete time: %s", string(key))
 		if val := string(w.Get(key)); val != string(key) {
@@ -83,6 +82,10 @@ func TestDelete(t *testing.T) {
 		}
 
 		w.Delete(key)
+
+		debug = GetDebug(w)
+		dbbs, _ = json.Marshal(debug)
+		fmt.Printf("%s\n\n", string(dbbs))
 
 		if val := string(w.Get(key)); len(val) != 0 {
 			t.Fatalf("invalid value, expected \"%s\" and received \"%s\"", "", val)
