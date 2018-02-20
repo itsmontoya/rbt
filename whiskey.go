@@ -1,4 +1,4 @@
-package whiskey
+package rbt
 
 import (
 	"bytes"
@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	// ErrCannotAllocate is returned when Whiskey cannot allocate the bytes it needs
+	// ErrCannotAllocate is returned when Tree cannot allocate the bytes it needs
 	ErrCannotAllocate = errors.Error("cannot allocate needed bytes")
 )
 
@@ -26,25 +26,25 @@ const (
 
 // Note: These have to be variables in order to be referenced
 var (
-	labelSizePtr = unsafe.Sizeof(label{})
+	trunkSizePtr = unsafe.Sizeof(trunk{})
 	blockSizePtr = unsafe.Sizeof(Block{})
 
-	labelSize = *(*int64)(unsafe.Pointer(&labelSizePtr))
+	trunkSize = *(*int64)(unsafe.Pointer(&trunkSizePtr))
 	blockSize = *(*int64)(unsafe.Pointer(&blockSizePtr))
 )
 
-// New will return a new Whiskey
+// New will return a new Tree
 // sz is the size (in bytes) to initially allocate for this db
-func New(sz int64) (w *Whiskey) {
+func New(sz int64) (t *Tree) {
 	bs := newBytes()
 	// The only error that can return is ErrCannotAllocate which will not occur for a simple Bytes backend
-	w, _ = NewRaw(sz, bs.grow, nil)
+	t, _ = NewRaw(sz, bs.grow, nil)
 	return
 }
 
-// NewMMAP will return a new MMAP Whiskey
+// NewMMAP will return a new MMAP Tree
 // sz is the size (in bytes) to initially allocate for this db
-func NewMMAP(dir, name string, sz int64) (w *Whiskey, err error) {
+func NewMMAP(dir, name string, sz int64) (t *Tree, err error) {
 	var mm *MMap
 	if mm, err = newMMap(dir, name); err != nil {
 		return
@@ -53,41 +53,41 @@ func NewMMAP(dir, name string, sz int64) (w *Whiskey, err error) {
 	return NewRaw(sz, mm.grow, mm.Close)
 }
 
-// NewRaw will return a new Whiskey with the provided size, grow func, and close func
+// NewRaw will return a new Tree with the provided size, grow func, and close func
 // sz is the size (in bytes) to initially allocate for this db
 // gfn is the function to call on grows
 // cfn is the function to call on close (optional)
-func NewRaw(sz int64, gfn GrowFn, cfn CloseFn) (wp *Whiskey, err error) {
-	var w Whiskey
-	w.gfn = gfn
-	w.cfn = cfn
+func NewRaw(sz int64, gfn GrowFn, cfn CloseFn) (tp *Tree, err error) {
+	var t Tree
+	t.gfn = gfn
+	t.cfn = cfn
 
-	if sz < labelSize {
-		sz = labelSize
+	if sz < trunkSize {
+		sz = trunkSize
 	}
 
-	if w.bs = w.gfn(sz); int64(len(w.bs)) < sz {
+	if t.bs = t.gfn(sz); int64(len(t.bs)) < sz {
 		err = ErrCannotAllocate
 		return
 	}
 
-	w.setLabel()
+	t.setLabel()
 	// Check if trunk has been initialized
-	if w.l.tail == 0 {
+	if t.t.tail == 0 {
 		// trunk has not been set, set inital values
-		w.l.root = -1
-		w.l.tail = labelSize
-		w.l.cap = sz
+		t.t.root = -1
+		t.t.tail = trunkSize
+		t.t.cap = sz
 	}
 
-	wp = &w
+	tp = &t
 	return
 }
 
-// Whiskey is a red-black tree data structure
-type Whiskey struct {
+// Tree is a red-black tree data structure
+type Tree struct {
 	bs []byte
-	l  *label
+	t  *trunk
 
 	gfn GrowFn
 	cfn CloseFn
@@ -95,16 +95,16 @@ type Whiskey struct {
 
 // getHead will get the very first item starting from a given node
 // Note: If called from root, will return the first item in the tree
-func (w *Whiskey) getHead(startOffset int64) (offset int64) {
+func (t *Tree) getHead(startOffset int64) (offset int64) {
 	offset = -1
 
 	if startOffset == -1 {
 		return
 	}
 
-	b := w.getBlock(startOffset)
+	b := t.getBlock(startOffset)
 	if child := b.children[0]; child != -1 {
-		return w.getHead(child)
+		return t.getHead(child)
 	}
 
 	return startOffset
@@ -112,30 +112,30 @@ func (w *Whiskey) getHead(startOffset int64) (offset int64) {
 
 // getTail will get the very last item starting from a given node
 // Note: If called from root, will return the last item in the tree
-func (w *Whiskey) getTail(startOffset int64) (offset int64) {
+func (t *Tree) getTail(startOffset int64) (offset int64) {
 	offset = -1
 
 	if startOffset == -1 {
 		return
 	}
 
-	b := w.getBlock(startOffset)
+	b := t.getBlock(startOffset)
 	if child := b.children[1]; child != -1 {
-		return w.getTail(child)
+		return t.getTail(child)
 	}
 
 	return startOffset
 }
 
-func (w *Whiskey) getUncle(startOffset int64) (offset int64) {
+func (t *Tree) getUncle(startOffset int64) (offset int64) {
 	offset = -1
-	block := w.getBlock(startOffset)
-	parent := w.getBlock(block.parent)
+	block := t.getBlock(startOffset)
+	parent := t.getBlock(block.parent)
 	if parent == nil {
 		return
 	}
 
-	grandparent := w.getBlock(parent.parent)
+	grandparent := t.getBlock(parent.parent)
 	if grandparent == nil {
 		return
 	}
@@ -151,29 +151,29 @@ func (w *Whiskey) getUncle(startOffset int64) (offset int64) {
 	return
 }
 
-func (w *Whiskey) getBlock(offset int64) (b *Block) {
+func (t *Tree) getBlock(offset int64) (b *Block) {
 	if offset == -1 {
 		return
 	}
 
-	return (*Block)(unsafe.Pointer(&w.bs[offset]))
+	return (*Block)(unsafe.Pointer(&t.bs[offset]))
 }
 
-func (w *Whiskey) getKey(b *Block) (key []byte) {
-	return w.bs[b.blobOffset : b.blobOffset+b.keyLen]
+func (t *Tree) getKey(b *Block) (key []byte) {
+	return t.bs[b.blobOffset : b.blobOffset+b.keyLen]
 }
 
-func (w *Whiskey) getValue(b *Block) (value []byte) {
+func (t *Tree) getValue(b *Block) (value []byte) {
 	valueIndex := b.blobOffset + b.keyLen
-	return w.bs[valueIndex : valueIndex+b.valLen]
+	return t.bs[valueIndex : valueIndex+b.valLen]
 }
 
-func (w *Whiskey) setLabel() {
-	w.l = (*label)(unsafe.Pointer(&w.bs[0]))
-	w.l.cap = int64(len(w.bs))
+func (t *Tree) setLabel() {
+	t.t = (*trunk)(unsafe.Pointer(&t.bs[0]))
+	t.t.cap = int64(len(t.bs))
 }
 
-func (w *Whiskey) setParentChild(b, parent, child *Block) {
+func (t *Tree) setParentChild(b, parent, child *Block) {
 	switch b.ct {
 	case childLeft:
 		parent.children[0] = child.offset
@@ -184,19 +184,19 @@ func (w *Whiskey) setParentChild(b, parent, child *Block) {
 	}
 }
 
-func (w *Whiskey) setBlob(b *Block, key, value []byte) (grew bool) {
+func (t *Tree) setBlob(b *Block, key, value []byte) (grew bool) {
 	valLen := int64(len(value))
 	if valLen == b.valLen {
 		blobIndex := b.offset + blockSize
 		valueIndex := blobIndex + b.keyLen
-		copy(w.bs[valueIndex:], value)
+		copy(t.bs[valueIndex:], value)
 		return
 	}
 
 	var offset, boffset int64
 	offset = b.offset
-	if boffset, grew = w.newBlob(key, value); grew {
-		b = w.getBlock(offset)
+	if boffset, grew = t.newBlob(key, value); grew {
+		b = t.getBlock(offset)
 	}
 
 	b.blobOffset = boffset
@@ -204,7 +204,7 @@ func (w *Whiskey) setBlob(b *Block, key, value []byte) (grew bool) {
 	return
 }
 
-func (w *Whiskey) growBlob(b *Block, key []byte, sz int64) (grew bool) {
+func (t *Tree) growBlob(b *Block, key []byte, sz int64) (grew bool) {
 	if sz <= b.valLen {
 		return
 	}
@@ -221,19 +221,19 @@ func (w *Whiskey) growBlob(b *Block, key []byte, sz int64) (grew bool) {
 	delta := vlen - b.valLen
 
 	offset := b.offset
-	boffset := w.l.tail
+	boffset := t.t.tail
 	blobLen := int64(len(key)) + vlen
-	if grew = w.grow(boffset + blobLen); grew {
-		b = w.getBlock(offset)
+	if grew = t.grow(boffset + blobLen); grew {
+		b = t.getBlock(offset)
 	}
 
-	value := w.getValue(b)
-	copy(w.bs[boffset:], key)
-	copy(w.bs[boffset+b.keyLen:], value)
-	w.l.tail += blobLen
+	value := t.getValue(b)
+	copy(t.bs[boffset:], key)
+	copy(t.bs[boffset+b.keyLen:], value)
+	t.t.tail += blobLen
 
-	for i := w.l.tail - delta; i < w.l.tail; i++ {
-		w.bs[i] = 0
+	for i := t.t.tail - delta; i < t.t.tail; i++ {
+		t.bs[i] = 0
 	}
 
 	b.blobOffset = boffset
@@ -241,11 +241,11 @@ func (w *Whiskey) growBlob(b *Block, key []byte, sz int64) (grew bool) {
 	return
 }
 
-func (w *Whiskey) newBlock(key []byte) (b *Block, offset int64, grew bool) {
-	offset = w.l.tail
-	grew = w.grow(offset + blockSize)
-	b = w.getBlock(offset)
-	w.l.tail += blockSize
+func (t *Tree) newBlock(key []byte) (b *Block, offset int64, grew bool) {
+	offset = t.t.tail
+	grew = t.grow(offset + blockSize)
+	b = t.getBlock(offset)
+	t.t.tail += blockSize
 
 	// All new blocks start as red
 	b.c = colorRed
@@ -264,25 +264,25 @@ func (w *Whiskey) newBlock(key []byte) (b *Block, offset int64, grew bool) {
 	return
 }
 
-func (w *Whiskey) newBlob(key, value []byte) (offset int64, grew bool) {
-	offset = w.l.tail
+func (t *Tree) newBlob(key, value []byte) (offset int64, grew bool) {
+	offset = t.t.tail
 	blobLen := int64(len(key) + len(value))
-	grew = w.grow(offset + blobLen)
-	copy(w.bs[offset:], key)
-	copy(w.bs[offset+int64(len(key)):], value)
-	w.l.tail += blobLen
+	grew = t.grow(offset + blobLen)
+	copy(t.bs[offset:], key)
+	copy(t.bs[offset+int64(len(key)):], value)
+	t.t.tail += blobLen
 	return
 }
 
 // seekBlock will return a Block matching the provided key. It create is set to true, a new Block will be created if no match is found
-func (w *Whiskey) seekBlock(startOffset int64, key []byte, create bool) (offset int64, grew bool) {
+func (t *Tree) seekBlock(startOffset int64, key []byte, create bool) (offset int64, grew bool) {
 	offset = -1
 	if startOffset == -1 {
 		return
 	}
 
-	block := w.getBlock(startOffset)
-	blockKey := w.getKey(block)
+	block := t.getBlock(startOffset)
+	blockKey := t.getKey(block)
 
 	switch bytes.Compare(key, blockKey) {
 	case 1:
@@ -293,8 +293,8 @@ func (w *Whiskey) seekBlock(startOffset int64, key []byte, create bool) (offset 
 			}
 
 			var nb *Block
-			if nb, offset, grew = w.newBlock(key); grew {
-				block = w.getBlock(startOffset)
+			if nb, offset, grew = t.newBlock(key); grew {
+				block = t.getBlock(startOffset)
 			}
 
 			nb.ct = childRight
@@ -303,7 +303,7 @@ func (w *Whiskey) seekBlock(startOffset int64, key []byte, create bool) (offset 
 			return
 		}
 
-		return w.seekBlock(child, key, create)
+		return t.seekBlock(child, key, create)
 
 	case -1:
 		child := block.children[0]
@@ -313,8 +313,8 @@ func (w *Whiskey) seekBlock(startOffset int64, key []byte, create bool) (offset 
 			}
 
 			var nb *Block
-			if nb, offset, grew = w.newBlock(key); grew {
-				block = w.getBlock(startOffset)
+			if nb, offset, grew = t.newBlock(key); grew {
+				block = t.getBlock(startOffset)
 			}
 
 			nb.ct = childLeft
@@ -323,7 +323,7 @@ func (w *Whiskey) seekBlock(startOffset int64, key []byte, create bool) (offset 
 			return
 		}
 
-		return w.seekBlock(child, key, create)
+		return t.seekBlock(child, key, create)
 
 	case 0:
 		offset = startOffset
@@ -333,19 +333,19 @@ func (w *Whiskey) seekBlock(startOffset int64, key []byte, create bool) (offset 
 	return
 }
 
-func (w *Whiskey) grow(sz int64) (grew bool) {
-	if w.l.cap > sz {
+func (t *Tree) grow(sz int64) (grew bool) {
+	if t.t.cap > sz {
 		return
 	}
 
-	w.bs = w.gfn(sz)
-	w.setLabel()
+	t.bs = t.gfn(sz)
+	t.setLabel()
 	return true
 }
 
-func (w *Whiskey) balance(b *Block) {
-	parent := w.getBlock(b.parent)
-	uncle := w.getBlock(w.getUncle(b.offset))
+func (t *Tree) balance(b *Block) {
+	parent := t.getBlock(b.parent)
+	uncle := t.getBlock(t.getUncle(b.offset))
 
 	switch {
 	case b.c == colorBlack:
@@ -360,33 +360,33 @@ func (w *Whiskey) balance(b *Block) {
 		parent.c = colorBlack
 		uncle.c = colorBlack
 
-		grandparent := w.getBlock(parent.parent)
+		grandparent := t.getBlock(parent.parent)
 		grandparent.c = colorRed
 		// Balance grandparent
-		w.balance(grandparent)
+		t.balance(grandparent)
 
 	case parent.c == colorRed:
-		grandparent := w.getBlock(parent.parent)
+		grandparent := t.getBlock(parent.parent)
 
-		if w.isTriangle(b, parent) {
-			w.rotateParent(b)
+		if t.isTriangle(b, parent) {
+			t.rotateParent(b)
 			// Balance parent
-			w.balance(parent)
+			t.balance(parent)
 		} else {
 			// Is a line
-			w.rotateGrandparent(b)
+			t.rotateGrandparent(b)
 			// Balance grandparent
-			w.balance(grandparent)
+			t.balance(grandparent)
 		}
 	}
 }
 
-func (w *Whiskey) leftRotate(b *Block) {
-	parent := w.getBlock(b.parent)
-	grandparent := w.getBlock(parent.parent)
+func (t *Tree) leftRotate(b *Block) {
+	parent := t.getBlock(b.parent)
+	grandparent := t.getBlock(parent.parent)
 
 	// Swap  children
-	swapChild := w.getBlock(b.children[0])
+	swapChild := t.getBlock(b.children[0])
 	b.children[0] = parent.offset
 
 	if swapChild != nil {
@@ -399,7 +399,7 @@ func (w *Whiskey) leftRotate(b *Block) {
 	}
 
 	// Set block as the child for our grandparent
-	w.setParentChild(parent, grandparent, b)
+	t.setParentChild(parent, grandparent, b)
 
 	// Set n's grandparent as parent
 	if grandparent == nil {
@@ -415,12 +415,12 @@ func (w *Whiskey) leftRotate(b *Block) {
 	parent.ct = childLeft
 }
 
-func (w *Whiskey) rightRotate(b *Block) {
-	parent := w.getBlock(b.parent)
-	grandparent := w.getBlock(parent.parent)
+func (t *Tree) rightRotate(b *Block) {
+	parent := t.getBlock(b.parent)
+	grandparent := t.getBlock(parent.parent)
 
 	// Swap  children
-	swapChild := w.getBlock(b.children[1])
+	swapChild := t.getBlock(b.children[1])
 	b.children[1] = parent.offset
 
 	if swapChild != nil {
@@ -433,7 +433,7 @@ func (w *Whiskey) rightRotate(b *Block) {
 	}
 
 	// Set block as the child for our grandparent
-	w.setParentChild(parent, grandparent, b)
+	t.setParentChild(parent, grandparent, b)
 
 	// Set n's grandparent as parent
 	if grandparent == nil {
@@ -449,29 +449,29 @@ func (w *Whiskey) rightRotate(b *Block) {
 	parent.ct = childRight
 }
 
-func (w *Whiskey) rotateParent(b *Block) {
+func (t *Tree) rotateParent(b *Block) {
 	switch b.ct {
 	case childLeft:
-		w.rightRotate(b)
+		t.rightRotate(b)
 
 	case childRight:
-		w.leftRotate(b)
+		t.leftRotate(b)
 
 	default:
 		panic("invalid child type for parent rotation")
 	}
 }
 
-func (w *Whiskey) rotateGrandparent(b *Block) {
-	parent := w.getBlock(b.parent)
-	grandparent := w.getBlock(parent.parent)
+func (t *Tree) rotateGrandparent(b *Block) {
+	parent := t.getBlock(b.parent)
+	grandparent := t.getBlock(parent.parent)
 
 	switch parent.ct {
 	case childLeft:
-		w.rightRotate(parent)
+		t.rightRotate(parent)
 
 	case childRight:
-		w.leftRotate(parent)
+		t.leftRotate(parent)
 
 	default:
 		panic("invalid child type for grandparent rotation")
@@ -481,7 +481,7 @@ func (w *Whiskey) rotateGrandparent(b *Block) {
 	grandparent.c = colorRed
 }
 
-func (w *Whiskey) isTriangle(b, parent *Block) (isTriangle bool) {
+func (t *Tree) isTriangle(b, parent *Block) (isTriangle bool) {
 	if b == nil {
 		return
 	}
@@ -497,7 +497,7 @@ func (w *Whiskey) isTriangle(b, parent *Block) (isTriangle bool) {
 	return
 }
 
-func (w *Whiskey) numBlack(b *Block) (nb int) {
+func (t *Tree) numBlack(b *Block) (nb int) {
 	if b == nil {
 		return
 	}
@@ -507,29 +507,29 @@ func (w *Whiskey) numBlack(b *Block) (nb int) {
 	}
 
 	if childOffset := b.children[0]; childOffset != -1 {
-		nb += w.numBlack(w.getBlock(childOffset))
+		nb += t.numBlack(t.getBlock(childOffset))
 	}
 
 	if childOffset := b.children[1]; childOffset != -1 {
-		nb += w.numBlack(w.getBlock(childOffset))
+		nb += t.numBlack(t.getBlock(childOffset))
 	}
 
 	return
 }
 
-func (w *Whiskey) iterate(b *Block, fn ForEachFn) (ended bool) {
+func (t *Tree) iterate(b *Block, fn ForEachFn) (ended bool) {
 	if child := b.children[0]; child != -1 {
-		if ended = w.iterate(w.getBlock(child), fn); ended {
+		if ended = t.iterate(t.getBlock(child), fn); ended {
 			return
 		}
 	}
 
-	if ended = fn(w.getKey(b), w.getValue(b)); ended {
+	if ended = fn(t.getKey(b), t.getValue(b)); ended {
 		return
 	}
 
 	if child := b.children[1]; child != -1 {
-		if ended = w.iterate(w.getBlock(child), fn); ended {
+		if ended = t.iterate(t.getBlock(child), fn); ended {
 			return
 		}
 
@@ -539,55 +539,55 @@ func (w *Whiskey) iterate(b *Block, fn ForEachFn) (ended bool) {
 }
 
 // Get will retrieve an item from a tree
-func (w *Whiskey) Get(key []byte) (val []byte) {
-	if offset, _ := w.seekBlock(w.l.root, key, false); offset != -1 {
+func (t *Tree) Get(key []byte) (val []byte) {
+	if offset, _ := t.seekBlock(t.t.root, key, false); offset != -1 {
 		// Node was found, set value as the node's value
-		val = w.getValue(w.getBlock(offset))
+		val = t.getValue(t.getBlock(offset))
 	}
 
 	return
 }
 
 // Put will insert an item into the tree
-func (w *Whiskey) Put(key, val []byte) {
+func (t *Tree) Put(key, val []byte) {
 	var (
 		b      *Block
 		grew   bool
 		offset int64
 	)
 
-	if w.l.root == -1 {
+	if t.t.root == -1 {
 		// Root doesn't exist, we can create one
-		b, offset, _ = w.newBlock(key)
-		w.l.root = offset
+		b, offset, _ = t.newBlock(key)
+		t.t.root = offset
 	} else {
 		// Find node whose key matches our provided key, if node does not exist - create it.
-		offset, grew = w.seekBlock(w.l.root, key, true)
-		b = w.getBlock(offset)
+		offset, grew = t.seekBlock(t.t.root, key, true)
+		b = t.getBlock(offset)
 	}
 
-	if grew = w.setBlob(b, key, val); grew {
-		b = w.getBlock(offset)
+	if grew = t.setBlob(b, key, val); grew {
+		b = t.getBlock(offset)
 	}
 
 	// Balance tree after insert
 	// TODO: This can be moved into the node-creation portion
-	w.balance(b)
+	t.balance(b)
 
-	root := w.getBlock(w.l.root)
+	root := t.getBlock(t.t.root)
 	if root.ct != childRoot {
 		// Root has changed, update root reference to the new root
-		w.l.root = root.parent
+		t.t.root = root.parent
 	}
 
-	w.l.cnt++
+	t.t.cnt++
 }
 
 // detachFromParent will detach a block from it's parent reference
 // Note: This is never called on root node, parent will always exist
-func (w *Whiskey) detachFromParent(b *Block) {
+func (t *Tree) detachFromParent(b *Block) {
 	// Get the parent of block
-	parent := w.getBlock(b.parent)
+	parent := t.getBlock(b.parent)
 	if parent == nil {
 		return
 	}
@@ -601,32 +601,32 @@ func (w *Whiskey) detachFromParent(b *Block) {
 }
 
 // adoptChildren will set in-block children as out-block children
-func (w *Whiskey) adoptChildren(in, out *Block) {
+func (t *Tree) adoptChildren(in, out *Block) {
 	var child *Block
-	//	parent := w.getBlock(in.parent)
+	//	parent := t.getBlock(in.parent)
 	// Set children of in-block to match the children of the out-block
 	// Note: The in-block will always be a leaf. As a result, we know
 	// that our next block does not have children.
 	if out.children[0] != in.offset {
-		if child = w.getBlock(in.children[0]); child != nil {
+		if child = t.getBlock(in.children[0]); child != nil {
 			child.parent = in.parent
 			in.parent = -1
 		}
 
 		in.children[0] = out.children[0]
-		if child = w.getBlock(in.children[0]); child != nil {
+		if child = t.getBlock(in.children[0]); child != nil {
 			child.parent = in.offset
 		}
 	}
 
 	if out.children[1] != in.offset {
-		if child = w.getBlock(in.children[1]); child != nil {
+		if child = t.getBlock(in.children[1]); child != nil {
 			child.parent = in.parent
 			in.parent = -1
 		}
 
 		in.children[1] = out.children[1]
-		if child = w.getBlock(in.children[1]); child != nil {
+		if child = t.getBlock(in.children[1]); child != nil {
 			child.parent = in.offset
 		}
 	}
@@ -639,98 +639,98 @@ func (w *Whiskey) adoptChildren(in, out *Block) {
 	out.children[1] = -1
 }
 
-func (w *Whiskey) hasBlackChildpair(b *Block) bool {
+func (t *Tree) hasBlackChildpair(b *Block) bool {
 	if b == nil {
 		return false
 	}
 
 	var c *Block
-	if c = w.getBlock(b.children[0]); c != nil && c.c == colorRed {
+	if c = t.getBlock(b.children[0]); c != nil && c.c == colorRed {
 		return false
 	}
 
-	if c = w.getBlock(b.children[1]); c != nil && c.c == colorRed {
+	if c = t.getBlock(b.children[1]); c != nil && c.c == colorRed {
 		return false
 	}
 
 	return true
 }
 
-func (w *Whiskey) hasRedChildpair(b *Block) bool {
+func (t *Tree) hasRedChildpair(b *Block) bool {
 	if b == nil {
 		return false
 	}
 
 	var c *Block
-	if c = w.getBlock(b.children[0]); c != nil && c.c == colorBlack {
+	if c = t.getBlock(b.children[0]); c != nil && c.c == colorBlack {
 		return false
 	}
 
-	if c = w.getBlock(b.children[1]); c != nil && c.c == colorBlack {
+	if c = t.getBlock(b.children[1]); c != nil && c.c == colorBlack {
 		return false
 	}
 
 	return true
 }
 
-func (w *Whiskey) zeroChildrenDelete(b, parent *Block) {
-	w.replace(b, nil, parent)
+func (t *Tree) zeroChildrenDelete(b, parent *Block) {
+	t.replace(b, nil, parent)
 }
 
-func (w *Whiskey) oneChildDelete(b, parent *Block) (next *Block) {
+func (t *Tree) oneChildDelete(b, parent *Block) (next *Block) {
 	if b.children[1] != -1 {
-		next = w.getBlock(b.children[1])
+		next = t.getBlock(b.children[1])
 	} else {
-		next = w.getBlock(b.children[0])
+		next = t.getBlock(b.children[0])
 	}
 
-	w.replace(b, next, parent)
+	t.replace(b, next, parent)
 	return
 }
 
-func (w *Whiskey) twoChildDelete(b, parent *Block) (next *Block) {
+func (t *Tree) twoChildDelete(b, parent *Block) (next *Block) {
 	var child *Block
 	// Get the very next element following block
 	// Note: Selecting the second child will ensure we move forward.
 	// Calling getHead from this location will land us at the item directly
 	// following the target block.
-	next = w.getBlock(w.getHead(b.children[1]))
+	next = t.getBlock(t.getHead(b.children[1]))
 
 	if next.offset != b.children[1] {
 		// Our next item is not the direct child of our target block, let's have our next block's parent adopt the orphan
 		// Note: If the child doesn't exist, the offset of -1 will be applied as the orphan reference
 		var coffset int64 = -1
-		if child = w.getBlock(next.children[1]); child != nil {
+		if child = t.getBlock(next.children[1]); child != nil {
 			// Child exists, set child offset
 			coffset = child.offset
 			child.parent = next.parent
 		}
 
-		nextParent := w.getBlock(next.parent)
+		nextParent := t.getBlock(next.parent)
 		// Have next parent adopt the orphan
 		nextParent.children[0] = coffset
 		// Detach next from it's parent
 		next.parent = -1
 
 		next.children[1] = b.children[1]
-		if child = w.getBlock(next.children[1]); child != nil {
+		if child = t.getBlock(next.children[1]); child != nil {
 			child.parent = next.offset
 		}
 	}
 
 	next.children[0] = b.children[0]
-	if child = w.getBlock(next.children[0]); child != nil {
+	if child = t.getBlock(next.children[0]); child != nil {
 		child.parent = next.offset
 	}
 
-	w.replace(b, next, parent)
+	t.replace(b, next, parent)
 	return
 }
 
-func (w *Whiskey) replace(old, new, parent *Block) {
+func (t *Tree) replace(old, new, parent *Block) {
 	var noffset int64 = -1
 	if new != nil {
-		w.detachFromParent(new)
+		t.detachFromParent(new)
 		// Set next-block childtype as the block childtype
 		new.ct = old.ct
 		// Set the next-block parent as the block parent
@@ -741,8 +741,8 @@ func (w *Whiskey) replace(old, new, parent *Block) {
 	// Set the parent's child value as the offset to our next block
 	switch old.ct {
 	case childRoot:
-		// If block is root, we need to update the label's reference to root
-		w.l.root = noffset
+		// If block is root, we need to update the trunk's reference to root
+		t.t.root = noffset
 	case childLeft:
 		parent.children[0] = noffset
 	case childRight:
@@ -750,7 +750,7 @@ func (w *Whiskey) replace(old, new, parent *Block) {
 	}
 }
 
-func (w *Whiskey) deleteBalance(b, parent *Block) {
+func (t *Tree) deleteBalance(b, parent *Block) {
 	if b.c != colorDoubleBlack {
 		return
 	}
@@ -764,9 +764,9 @@ func (w *Whiskey) deleteBalance(b, parent *Block) {
 	// Acquire sibling
 	switch {
 	case b.ct == childLeft:
-		sibling = w.getBlock(parent.children[1])
+		sibling = t.getBlock(parent.children[1])
 	case b.ct == childRight:
-		sibling = w.getBlock(parent.children[0])
+		sibling = t.getBlock(parent.children[0])
 	case b.ct == childRoot:
 		b.c = colorBlack
 		return
@@ -779,8 +779,8 @@ func (w *Whiskey) deleteBalance(b, parent *Block) {
 	siblingIsBlack := isBlack(sibling)
 	var leftNephew, rightNephew *Block
 	if sibling != nil {
-		leftNephew = w.getBlock(sibling.children[0])
-		rightNephew = w.getBlock(sibling.children[1])
+		leftNephew = t.getBlock(sibling.children[0])
+		rightNephew = t.getBlock(sibling.children[1])
 	}
 
 	// Sibling rotate bonanza
@@ -796,7 +796,7 @@ func (w *Whiskey) deleteBalance(b, parent *Block) {
 			return
 		} else if parent.c == colorBlack {
 			parent.c = colorDoubleBlack
-			w.deleteBalance(parent, w.getBlock(parent.parent))
+			t.deleteBalance(parent, t.getBlock(parent.parent))
 		}
 
 	// Sibling is black and has at least one red child
@@ -806,32 +806,32 @@ func (w *Whiskey) deleteBalance(b, parent *Block) {
 		// 1. Left Left Case (s is left child of its parent and r is left child of s or both children of s are red).
 		case sibling.ct == childLeft && isRed(leftNephew):
 			// Right rotate sibling
-			w.rightRotate(sibling)
+			t.rightRotate(sibling)
 			// Recolor left nephew to black
 			leftNephew.c = colorBlack
 
 		// 2. Left Right Case (s is left child of its parent and r is right child).
 		case sibling.ct == childLeft && isRed(rightNephew):
 			// Left rotate right nephew
-			w.leftRotate(rightNephew)
+			t.leftRotate(rightNephew)
 			// Right rotate right nephew
-			w.rightRotate(rightNephew)
+			t.rightRotate(rightNephew)
 
 			// Note: Sibling is now left nephew and right nephew is now sibling
 
 		// 3. Right Right Case (s is right child of its parent and r is right child of s or both children of s are red)
 		case sibling.ct == childRight && isRed(rightNephew):
 			// Left rotate sibling
-			w.leftRotate(sibling)
+			t.leftRotate(sibling)
 			// Recolor right nephew to black
 			rightNephew.c = colorBlack
 
 		// 4. Right Left Case (s is right child of its parent and r is left child of s)
 		case sibling.ct == childRight && isRed(leftNephew):
 			// Right rotate left nephew
-			w.rightRotate(leftNephew)
+			t.rightRotate(leftNephew)
 			// Left rotate left nephew
-			w.leftRotate(leftNephew)
+			t.leftRotate(leftNephew)
 
 			// Note: Sibling is now right nephew and left nephew is now sibling
 		}
@@ -839,9 +839,9 @@ func (w *Whiskey) deleteBalance(b, parent *Block) {
 	// Sibling is red
 	default:
 		if sibling.ct == childLeft {
-			w.rightRotate(sibling)
+			t.rightRotate(sibling)
 		} else if sibling.ct == childRight {
-			w.leftRotate(sibling)
+			t.leftRotate(sibling)
 		}
 	}
 
@@ -849,35 +849,35 @@ func (w *Whiskey) deleteBalance(b, parent *Block) {
 }
 
 // Delete will remove an item from the tree
-func (w *Whiskey) Delete(key []byte) {
+func (t *Tree) Delete(key []byte) {
 	var (
 		b      *Block
 		next   *Block
 		offset int64
 	)
 
-	if offset, _ = w.seekBlock(w.l.root, key, false); offset == -1 {
+	if offset, _ = t.seekBlock(t.t.root, key, false); offset == -1 {
 		return
 	}
 
-	b = w.getBlock(offset)
-	parent := w.getBlock(b.parent)
+	b = t.getBlock(offset)
+	parent := t.getBlock(b.parent)
 	hasLeft := b.children[0] != -1
 	hasRight := b.children[1] != -1
 
 	// BST Delete switch
 	switch {
 	case hasLeft && hasRight:
-		next = w.twoChildDelete(b, parent)
+		next = t.twoChildDelete(b, parent)
 
 	case !hasLeft && !hasRight:
-		w.zeroChildrenDelete(b, parent)
+		t.zeroChildrenDelete(b, parent)
 		// We are just using this as a placeholder for next
 		next = b
 	default:
 		// Technically this is out of order, but it seems much more clean to check to see
 		// if we have ALL or NONE. If neither cases exist, we know we have one child
-		next = w.oneChildDelete(b, parent)
+		next = t.oneChildDelete(b, parent)
 
 	}
 
@@ -890,83 +890,83 @@ func (w *Whiskey) Delete(key []byte) {
 		next.c = colorDoubleBlack
 	}
 
-	w.deleteBalance(next, parent)
+	t.deleteBalance(next, parent)
 
-	root := w.getBlock(w.l.root)
+	root := t.getBlock(t.t.root)
 	if root != nil && root.ct != childRoot {
 		// Root has changed, update root reference to the new root
-		w.l.root = root.parent
+		t.t.root = root.parent
 	}
 
-	w.l.cnt--
+	t.t.cnt--
 	return
 }
 
 // ForEach will iterate through each tree item
-func (w *Whiskey) ForEach(fn ForEachFn) (ended bool) {
-	if w.l.root == -1 {
+func (t *Tree) ForEach(fn ForEachFn) (ended bool) {
+	if t.t.root == -1 {
 		// Root doesn't exist, return early
 		return
 	}
 
 	// Call iterate from root
-	return w.iterate(w.getBlock(w.l.root), fn)
+	return t.iterate(t.getBlock(t.t.root), fn)
 }
 
 // Grow will grow a blob value to a given size
-func (w *Whiskey) Grow(key []byte, sz int64) (bs []byte) {
+func (t *Tree) Grow(key []byte, sz int64) (bs []byte) {
 	var (
 		b      *Block
 		grew   bool
 		offset int64
 	)
 
-	if w.l.root == -1 {
+	if t.t.root == -1 {
 		// Root doesn't exist, we can create one
-		b, offset, _ = w.newBlock(key)
-		w.l.root = offset
+		b, offset, _ = t.newBlock(key)
+		t.t.root = offset
 	} else {
 		// Find node whose key matches our provided key, if node does not exist - create it.
-		offset, grew = w.seekBlock(w.l.root, key, true)
-		b = w.getBlock(offset)
+		offset, grew = t.seekBlock(t.t.root, key, true)
+		b = t.getBlock(offset)
 	}
 
-	if grew = w.growBlob(b, key, sz); grew {
-		b = w.getBlock(offset)
+	if grew = t.growBlob(b, key, sz); grew {
+		b = t.getBlock(offset)
 	}
 
 	// Balance tree after insert
 	// TODO: This can be moved into the node-creation portion
-	w.balance(b)
+	t.balance(b)
 
-	root := w.getBlock(w.l.root)
+	root := t.getBlock(t.t.root)
 	if root.ct != childRoot {
 		// Root has changed, update root reference to the new root
-		w.l.root = root.parent
+		t.t.root = root.parent
 	}
 
-	bs = w.getValue(b)
+	bs = t.getValue(b)
 	return
 }
 
 // Reset will clear the tree and keep the backend. Can be used as a fresh store
-func (w *Whiskey) Reset() {
-	w.l.tail = labelSize
-	w.l.root = -1
+func (t *Tree) Reset() {
+	t.t.tail = trunkSize
+	t.t.root = -1
 }
 
 // Len will return the length of the data-store
-func (w *Whiskey) Len() (n int) {
-	return int(w.l.cnt)
+func (t *Tree) Len() (n int) {
+	return int(t.t.cnt)
 }
 
 // Close will close a tree
-func (w *Whiskey) Close() (err error) {
-	if w.cfn == nil {
+func (t *Tree) Close() (err error) {
+	if t.cfn == nil {
 		return
 	}
 
-	return w.cfn()
+	return t.cfn()
 }
 
 func isBlack(b *Block) bool {

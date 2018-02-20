@@ -1,26 +1,30 @@
-# whiskey [![GoDoc](https://godoc.org/github.com/itsmontoya/whiskey?status.svg)](https://godoc.org/github.com/itsmontoya/whiskey) ![Status](https://img.shields.io/badge/status-beta-yellow.svg)
-whiskey is a simple red-black tree for storing data in a sorted manner
+<!-- markdownlint-disable -->
+# rbt [![GoDoc](https://godoc.org/github.com/itsmontoya/rbt?status.svg)](https://godoc.org/github.com/itsmontoya/rbt) ![Status](https://img.shields.io/badge/status-beta-yellow.svg)
+<!-- markdownlint-enable -->
+rbt is a simple red-black tree for storing data in a sorted manner
 
 ## Benchmarks
+
+<!-- markdownlint-disable -->
 ```bash
 ## go --version
 ## > go version go1.9.3 linux/amd64
 
-# Whiskey (byteslice)
-BenchmarkWhiskeyGet-16                  1000     1802499 ns/op         0 B/op        0 allocs/op
-BenchmarkWhiskeySortedGetPut-16          500     3538649 ns/op         0 B/op        0 allocs/op
-BenchmarkWhiskeySortedPut-16            1000     1941610 ns/op         0 B/op        0 allocs/op
-BenchmarkWhiskeyReversePut-16            500     2005640 ns/op         0 B/op        0 allocs/op
-BenchmarkWhiskeyRandomPut-16             500     2766245 ns/op         0 B/op        0 allocs/op
-BenchmarkWhiskeyForEach-16             20000       95022 ns/op         0 B/op        0 allocs/op
+# Tree (byteslice)
+BenchmarkTreeGet-16                  1000     1802499 ns/op         0 B/op        0 allocs/op
+BenchmarkTreeSortedGetPut-16          500     3538649 ns/op         0 B/op        0 allocs/op
+BenchmarkTreeSortedPut-16            1000     1941610 ns/op         0 B/op        0 allocs/op
+BenchmarkTreeReversePut-16            500     2005640 ns/op         0 B/op        0 allocs/op
+BenchmarkTreeRandomPut-16             500     2766245 ns/op         0 B/op        0 allocs/op
+BenchmarkTreeForEach-16             20000       95022 ns/op         0 B/op        0 allocs/op
 
-# Whiskey (MMap)
-BenchmarkWhiskeyMMapGet-16              1000     1824530 ns/op         0 B/op        0 allocs/op
-BenchmarkWhiskeyMMapSortedGetPut-16      500     3576144 ns/op         0 B/op        0 allocs/op
-BenchmarkWhiskeyMMapSortedPut-16        1000     1989553 ns/op         0 B/op        0 allocs/op
-BenchmarkWhiskeyMMapReversePut-16       1000     1963757 ns/op         0 B/op        0 allocs/op
-BenchmarkWhiskeyMMapRandomPut-16         500     2728154 ns/op         0 B/op        0 allocs/op
-BenchmarkWhiskeyMMapForEach-16         20000       93281 ns/op         0 B/op        0 allocs/op
+# Tree (MMap)
+BenchmarkTreeMMapGet-16              1000     1824530 ns/op         0 B/op        0 allocs/op
+BenchmarkTreeMMapSortedGetPut-16      500     3576144 ns/op         0 B/op        0 allocs/op
+BenchmarkTreeMMapSortedPut-16        1000     1989553 ns/op         0 B/op        0 allocs/op
+BenchmarkTreeMMapReversePut-16       1000     1963757 ns/op         0 B/op        0 allocs/op
+BenchmarkTreeMMapRandomPut-16         500     2728154 ns/op         0 B/op        0 allocs/op
+BenchmarkTreeMMapForEach-16         20000       93281 ns/op         0 B/op        0 allocs/op
 
 # Skiplist (github.com/OneOfOne/skiplist)
 BenchmarkSkiplistGet-16                  500     2505922 ns/op         0 B/op        0 allocs/op
@@ -47,16 +51,19 @@ BenchmarkMapRandomPut-16                2000      538387 ns/op       786 B/op   
 BenchmarkMapForEach-16                 10000      153389 ns/op         0 B/op        0 allocs/op
 
 ```
+<!-- markdownlint-enable -->
 
 ## Memory usage
-```bash
-# Memory usage test involves setting 1 million keys and checking the total allocations with 
-# the populated data-store (See github.com/itsmontoya/whiskey/testing/allocs for source)
 
-# whiskey
-88025720 
+```bash
+# Memory usage test involves setting 1 million keys and checking the total allocations
+# with the populated data-store.
+# (See github.com/itsmontoya/rbt/testing/allocs for source)
+
+# rbt
+88025720
 # map (with pre-set length)
-109605384 
+109605384
 # skiplist
 123108784
 ```

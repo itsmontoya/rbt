@@ -18,8 +18,8 @@ func main() {
 	fmt.Println(end.Alloc - start.Alloc)
 }
 
-func populateN(n int) (t *whiskey.Tree) {
-	t = whiskey.New(n)
+func populateN(n int) (t *rbt.Tree) {
+	t = rbt.New(n)
 
 	for i := 0; i < n; i++ {
 		key := strconv.Itoa(i)

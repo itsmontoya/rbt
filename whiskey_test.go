@@ -1,4 +1,4 @@
-package whiskey
+package rbt
 
 import (
 	"bytes"
@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/itsmontoya/whiskey/testUtils"
+	"github.com/itsmontoya/rbt/testUtils"
 
 	"github.com/missionMeteora/journaler"
 
@@ -216,62 +216,62 @@ func TestRandomPut(t *testing.T) {
 	testPut(t, testUtils.GetRand(10))
 }
 
-func BenchmarkWhiskeyGet(b *testing.B) {
+func BenchmarkTreeGet(b *testing.B) {
 	benchGet(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkWhiskeySortedGetPut(b *testing.B) {
+func BenchmarkTreeSortedGetPut(b *testing.B) {
 	benchGetPut(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkWhiskeySortedPut(b *testing.B) {
+func BenchmarkTreeSortedPut(b *testing.B) {
 	benchPut(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkWhiskeyReversePut(b *testing.B) {
+func BenchmarkTreeReversePut(b *testing.B) {
 	benchPut(b, testReverseListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkWhiskeyRandomPut(b *testing.B) {
+func BenchmarkTreeRandomPut(b *testing.B) {
 	benchPut(b, testRandomListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkWhiskeyForEach(b *testing.B) {
+func BenchmarkTreeForEach(b *testing.B) {
 	benchForEach(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkWhiskeyMMapGet(b *testing.B) {
+func BenchmarkTreeMMapGet(b *testing.B) {
 	benchMMAPGet(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkWhiskeyMMapSortedGetPut(b *testing.B) {
+func BenchmarkTreeMMapSortedGetPut(b *testing.B) {
 	benchMMAPGetPut(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkWhiskeyMMapSortedPut(b *testing.B) {
+func BenchmarkTreeMMapSortedPut(b *testing.B) {
 	benchMMAPPut(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkWhiskeyMMapReversePut(b *testing.B) {
+func BenchmarkTreeMMapReversePut(b *testing.B) {
 	benchMMAPPut(b, testReverseListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkWhiskeyMMapRandomPut(b *testing.B) {
+func BenchmarkTreeMMapRandomPut(b *testing.B) {
 	benchMMAPPut(b, testRandomListStr)
 	b.ReportAllocs()
 }
 
-func BenchmarkWhiskeyMMapForEach(b *testing.B) {
+func BenchmarkTreeMMapForEach(b *testing.B) {
 	benchMMAPForEach(b, testSortedListStr)
 	b.ReportAllocs()
 }

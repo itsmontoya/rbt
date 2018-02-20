@@ -1,4 +1,4 @@
-package whiskey
+package rbt
 
 // newBytes will return a new byteslice backend
 func newBytes() *Bytes {
