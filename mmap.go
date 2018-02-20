@@ -1,4 +1,4 @@
-package whiskey
+package rbt
 
 import (
 	"os"

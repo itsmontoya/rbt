@@ -15,7 +15,7 @@ import (
 func main() {
 	list := getSorted(10000)
 	strs := getStrSlice(list)
-	tr := whiskey.New(10000)
+	tr := rbt.New(10000)
 	runtime.GC()
 	time.Sleep(time.Second * 3)
 	journaler.Notification("Values initialized, test starting")

@@ -1,9 +1,9 @@
 {
-  "name": "whiskey_chart",
+  "name": "rbt_chart",
   "version": "0.0.1",
   "description": "A debug charting utility",
   "main": "chart.ts",
-  "repository": "github.com/itsmontoya/whiskey",
+  "repository": "github.com/itsmontoya/rbt",
   "author": "itsMontoya",
   "license": "MIT",
   "dependencies": {
