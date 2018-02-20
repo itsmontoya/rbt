@@ -100,8 +100,14 @@ func TestGrow(t *testing.T) {
 }
 
 func TestBasic(t *testing.T) {
-	tr, err := NewMMAP("data", "mmap.db", 64)
-	if err != nil {
+	var err error
+	if err = os.MkdirAll("./test_data", 0755); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll("./test_data")
+
+	var tr *Tree
+	if tr, err = NewMMAP("./test_data", "mmap.db", 64); err != nil {
 		t.Fatal(err)
 	}
 
@@ -158,7 +164,7 @@ func TestBasic(t *testing.T) {
 
 	tr.Close()
 
-	if tr, err = NewMMAP("data", "mmap.db", 64); err != nil {
+	if tr, err = NewMMAP("./test_data", "mmap.db", 64); err != nil {
 		t.Fatal(err)
 	}
 
@@ -453,11 +459,16 @@ func benchForEach(b *testing.B, s []testUtils.KV) {
 }
 
 func benchMMAPGet(b *testing.B, s []testUtils.KV) {
-	tr, err := NewMMAP("data", "test.db", 1024*1024)
-	if err != nil {
+	var err error
+	if err = os.MkdirAll("./test_data", 0755); err != nil {
 		b.Fatal(err)
 	}
-	defer os.Remove("/data/test.db")
+	defer os.RemoveAll("./test_data")
+
+	var tr *Tree
+	if tr, err = NewMMAP("./test_data", "mmap.db", 1024*1024); err != nil {
+		b.Fatal(err)
+	}
 
 	for _, kv := range s {
 		tr.Put(kv.Val, kv.Val)
@@ -472,11 +483,16 @@ func benchMMAPGet(b *testing.B, s []testUtils.KV) {
 }
 
 func benchMMAPPut(b *testing.B, s []testUtils.KV) {
-	tr, err := NewMMAP("data", "test.db", 1024*1024)
-	if err != nil {
+	var err error
+	if err = os.MkdirAll("./test_data", 0755); err != nil {
 		b.Fatal(err)
 	}
-	//	defer os.Remove("/data/test.db")
+	defer os.RemoveAll("./test_data")
+
+	var tr *Tree
+	if tr, err = NewMMAP("./test_data", "mmap.db", 1024*1024); err != nil {
+		b.Fatal(err)
+	}
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -487,11 +503,16 @@ func benchMMAPPut(b *testing.B, s []testUtils.KV) {
 }
 
 func benchMMAPGetPut(b *testing.B, s []testUtils.KV) {
-	tr, err := NewMMAP("data", "test.db", 1024*1024)
-	if err != nil {
+	var err error
+	if err = os.MkdirAll("./test_data", 0755); err != nil {
 		b.Fatal(err)
 	}
-	defer os.Remove("/data/test.db")
+	defer os.RemoveAll("./test_data")
+
+	var tr *Tree
+	if tr, err = NewMMAP("./test_data", "mmap.db", 1024*1024); err != nil {
+		b.Fatal(err)
+	}
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
@@ -503,11 +524,16 @@ func benchMMAPGetPut(b *testing.B, s []testUtils.KV) {
 }
 
 func benchMMAPForEach(b *testing.B, s []testUtils.KV) {
-	tr, err := NewMMAP("data", "test.db", 1024*1024)
-	if err != nil {
+	var err error
+	if err = os.MkdirAll("./test_data", 0755); err != nil {
 		b.Fatal(err)
 	}
-	defer os.Remove("/data/test.db")
+	defer os.RemoveAll("./test_data")
+
+	var tr *Tree
+	if tr, err = NewMMAP("./test_data", "mmap.db", 1024*1024); err != nil {
+		b.Fatal(err)
+	}
 
 	for _, kv := range s {
 		tr.Put(kv.Val, kv.Val)
