@@ -1,0 +1,15 @@
+{
+        "version": "2.0.0",
+        "tasks": [
+                {
+                        "label": "run and watch",
+                        "command": "tsc",
+                        "args": [
+                                "--watch",
+                                "-p",
+                                "./testing/chart/ts/."
+                        ],
+                        "problemMatcher": "$tsc-watch"
+                }
+        ]
+}

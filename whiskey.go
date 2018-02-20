@@ -15,6 +15,7 @@ const (
 const (
 	colorBlack color = iota
 	colorRed
+	colorDoubleBlack
 )
 
 const (
@@ -582,6 +583,325 @@ func (w *Whiskey) Put(key, val []byte) {
 	w.l.cnt++
 }
 
+// detachFromParent will detach a block from it's parent reference
+// Note: This is never called on root node, parent will always exist
+func (w *Whiskey) detachFromParent(b *Block) {
+	// Get the parent of block
+	parent := w.getBlock(b.parent)
+	if parent == nil {
+		return
+	}
+
+	// Set parent's child value for -1 where the block resided
+	if b.ct == childLeft {
+		parent.children[0] = -1
+	} else if b.ct == childRight {
+		parent.children[1] = -1
+	}
+}
+
+// adoptChildren will set in-block children as out-block children
+func (w *Whiskey) adoptChildren(in, out *Block) {
+	var child *Block
+	//	parent := w.getBlock(in.parent)
+	// Set children of in-block to match the children of the out-block
+	// Note: The in-block will always be a leaf. As a result, we know
+	// that our next block does not have children.
+	if out.children[0] != in.offset {
+		if child = w.getBlock(in.children[0]); child != nil {
+			child.parent = in.parent
+			in.parent = -1
+		}
+
+		in.children[0] = out.children[0]
+		if child = w.getBlock(in.children[0]); child != nil {
+			child.parent = in.offset
+		}
+	}
+
+	if out.children[1] != in.offset {
+		if child = w.getBlock(in.children[1]); child != nil {
+			child.parent = in.parent
+			in.parent = -1
+		}
+
+		in.children[1] = out.children[1]
+		if child = w.getBlock(in.children[1]); child != nil {
+			child.parent = in.offset
+		}
+	}
+
+	// Set children of out to nil values
+	// Note: This technically isn't needed as the out block will be destoyed after this call
+	// We could technically sqeeze out some more performance by avoiding two unnecessary write calls.
+	// Consider removing this when going through the hyper-optimization phase
+	out.children[0] = -1
+	out.children[1] = -1
+}
+
+func (w *Whiskey) hasBlackChildpair(b *Block) bool {
+	if b == nil {
+		return false
+	}
+
+	var c *Block
+	if c = w.getBlock(b.children[0]); c != nil && c.c == colorRed {
+		return false
+	}
+
+	if c = w.getBlock(b.children[1]); c != nil && c.c == colorRed {
+		return false
+	}
+
+	return true
+}
+
+func (w *Whiskey) hasRedChildpair(b *Block) bool {
+	if b == nil {
+		return false
+	}
+
+	var c *Block
+	if c = w.getBlock(b.children[0]); c != nil && c.c == colorBlack {
+		return false
+	}
+
+	if c = w.getBlock(b.children[1]); c != nil && c.c == colorBlack {
+		return false
+	}
+
+	return true
+}
+
+func (w *Whiskey) zeroChildrenDelete(b, parent *Block) {
+	w.replace(b, nil, parent)
+}
+
+func (w *Whiskey) oneChildDelete(b, parent *Block) (next *Block) {
+	if b.children[1] != -1 {
+		next = w.getBlock(b.children[1])
+	} else {
+		next = w.getBlock(b.children[0])
+	}
+
+	w.replace(b, next, parent)
+	return
+}
+
+func (w *Whiskey) twoChildDelete(b, parent *Block) (next *Block) {
+	var child *Block
+	// Get the very next element following block
+	// Note: Selecting the second child will ensure we move forward.
+	// Calling getHead from this location will land us at the item directly
+	// following the target block.
+	next = w.getBlock(w.getHead(b.children[1]))
+
+	if next.offset != b.children[1] {
+		// Our next item is not the direct child of our target block, let's have our next block's parent adopt the orphan
+		// Note: If the child doesn't exist, the offset of -1 will be applied as the orphan reference
+		var coffset int64 = -1
+		if child = w.getBlock(next.children[1]); child != nil {
+			// Child exists, set child offset
+			coffset = child.offset
+			child.parent = next.parent
+		}
+
+		nextParent := w.getBlock(next.parent)
+		// Have next parent adopt the orphan
+		nextParent.children[0] = coffset
+		// Detach next from it's parent
+		next.parent = -1
+
+		next.children[1] = b.children[1]
+		if child = w.getBlock(next.children[1]); child != nil {
+			child.parent = next.offset
+		}
+	}
+
+	next.children[0] = b.children[0]
+	if child = w.getBlock(next.children[0]); child != nil {
+		child.parent = next.offset
+	}
+
+	w.replace(b, next, parent)
+	return
+}
+
+func (w *Whiskey) replace(old, new, parent *Block) {
+	var noffset int64 = -1
+	if new != nil {
+		w.detachFromParent(new)
+		// Set next-block childtype as the block childtype
+		new.ct = old.ct
+		// Set the next-block parent as the block parent
+		new.parent = old.parent
+		noffset = new.offset
+	}
+
+	// Set the parent's child value as the offset to our next block
+	switch old.ct {
+	case childRoot:
+		// If block is root, we need to update the label's reference to root
+		w.l.root = noffset
+	case childLeft:
+		parent.children[0] = noffset
+	case childRight:
+		parent.children[1] = noffset
+	}
+}
+
+func (w *Whiskey) deleteBalance(b, parent *Block) {
+	if b.c != colorDoubleBlack {
+		return
+	}
+
+	if b.ct == childRoot {
+		b.c = colorBlack
+		return
+	}
+
+	var sibling *Block
+	// Acquire sibling
+	switch {
+	case b.ct == childLeft:
+		sibling = w.getBlock(parent.children[1])
+	case b.ct == childRight:
+		sibling = w.getBlock(parent.children[0])
+	case b.ct == childRoot:
+		b.c = colorBlack
+		return
+	}
+
+	// Set sibling black state
+	// Note: We can eventually remove this for performance reasons once this function
+	// is completely fleshed out. We need to ensure that we are not dealing with a nil sibling
+	// This is just to avoid running into panic land
+	siblingIsBlack := isBlack(sibling)
+	var leftNephew, rightNephew *Block
+	if sibling != nil {
+		leftNephew = w.getBlock(sibling.children[0])
+		rightNephew = w.getBlock(sibling.children[1])
+	}
+
+	// Sibling rotate bonanza
+	switch {
+	// Sibling is black and has both black children
+	case siblingIsBlack && (isBlack(leftNephew) && isBlack(rightNephew)):
+		if sibling != nil {
+			sibling.c = colorRed
+		}
+
+		if parent.c == colorRed {
+			parent.c = colorBlack
+			return
+		} else if parent.c == colorBlack {
+			parent.c = colorDoubleBlack
+			w.deleteBalance(parent, w.getBlock(parent.parent))
+		}
+
+	// Sibling is black and has at least one red child
+	case siblingIsBlack:
+		// Rotation cases:
+		switch {
+		// 1. Left Left Case (s is left child of its parent and r is left child of s or both children of s are red).
+		case sibling.ct == childLeft && isRed(leftNephew):
+			// Right rotate sibling
+			w.rightRotate(sibling)
+			// Recolor left nephew to black
+			leftNephew.c = colorBlack
+
+		// 2. Left Right Case (s is left child of its parent and r is right child).
+		case sibling.ct == childLeft && isRed(rightNephew):
+			// Left rotate right nephew
+			w.leftRotate(rightNephew)
+			// Right rotate right nephew
+			w.rightRotate(rightNephew)
+
+			// Note: Sibling is now left nephew and right nephew is now sibling
+
+		// 3. Right Right Case (s is right child of its parent and r is right child of s or both children of s are red)
+		case sibling.ct == childRight && isRed(rightNephew):
+			// Left rotate sibling
+			w.leftRotate(sibling)
+			// Recolor right nephew to black
+			rightNephew.c = colorBlack
+
+		// 4. Right Left Case (s is right child of its parent and r is left child of s)
+		case sibling.ct == childRight && isRed(leftNephew):
+			// Right rotate left nephew
+			w.rightRotate(leftNephew)
+			// Left rotate left nephew
+			w.leftRotate(leftNephew)
+
+			// Note: Sibling is now right nephew and left nephew is now sibling
+		}
+
+	// Sibling is red
+	default:
+		if sibling.ct == childLeft {
+			w.rightRotate(sibling)
+		} else if sibling.ct == childRight {
+			w.leftRotate(sibling)
+		}
+	}
+
+	b.c = colorBlack
+}
+
+// Delete will remove an item from the tree
+func (w *Whiskey) Delete(key []byte) {
+	var (
+		b      *Block
+		next   *Block
+		offset int64
+	)
+
+	if offset, _ = w.seekBlock(w.l.root, key, false); offset == -1 {
+		return
+	}
+
+	b = w.getBlock(offset)
+	parent := w.getBlock(b.parent)
+	hasLeft := b.children[0] != -1
+	hasRight := b.children[1] != -1
+
+	// BST Delete switch
+	switch {
+	case hasLeft && hasRight:
+		next = w.twoChildDelete(b, parent)
+
+	case !hasLeft && !hasRight:
+		w.zeroChildrenDelete(b, parent)
+		// We are just using this as a placeholder for next
+		next = b
+	default:
+		// Technically this is out of order, but it seems much more clean to check to see
+		// if we have ALL or NONE. If neither cases exist, we know we have one child
+		next = w.oneChildDelete(b, parent)
+
+	}
+
+	// Balancing cases
+	if b.c == colorRed || next.c == colorRed {
+		// Simple Case: If either u or v is red
+		// Note: Because we are not disrupting the black-level, no rotation is needed
+		next.c = colorBlack
+	} else {
+		next.c = colorDoubleBlack
+	}
+
+	w.deleteBalance(next, parent)
+
+	root := w.getBlock(w.l.root)
+	if root != nil && root.ct != childRoot {
+		// Root has changed, update root reference to the new root
+		w.l.root = root.parent
+	}
+
+	w.l.cnt--
+	return
+}
+
 // ForEach will iterate through each tree item
 func (w *Whiskey) ForEach(fn ForEachFn) (ended bool) {
 	if w.l.root == -1 {
@@ -647,4 +967,20 @@ func (w *Whiskey) Close() (err error) {
 	}
 
 	return w.cfn()
+}
+
+func isBlack(b *Block) bool {
+	if b == nil {
+		return true
+	}
+
+	return b.c == colorBlack
+}
+
+func isRed(b *Block) bool {
+	if b == nil {
+		return false
+	}
+
+	return b.c == colorRed
 }
