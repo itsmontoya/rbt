@@ -1,4 +1,4 @@
-package rbt
+package backend
 
 import (
 	"os"
@@ -9,8 +9,8 @@ import (
 	"github.com/missionMeteora/toolkit/errors"
 )
 
-// newMMap will return a new Mmap
-func newMMap(dir, name string) (mp *MMap, err error) {
+// NewMMap will return a new Mmap
+func NewMMap(dir, name string) (mp *MMap, err error) {
 	var m MMap
 	if m.f, err = os.OpenFile(path.Join(dir, name), os.O_CREATE|os.O_RDWR, 0644); err != nil {
 		return
@@ -35,7 +35,8 @@ func (m *MMap) unmap() (err error) {
 	return m.mm.Unmap()
 }
 
-func (m *MMap) grow(sz int64) (bs []byte) {
+// Grow will grow the MMap to the requested size
+func (m *MMap) Grow(sz int64) (bs []byte) {
 	var err error
 	if m.cap == 0 {
 		var fi os.FileInfo
