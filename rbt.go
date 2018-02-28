@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"unsafe"
 
+	"github.com/itsmontoya/rbt/backend"
 	"github.com/missionMeteora/toolkit/errors"
 )
 
@@ -36,37 +37,36 @@ var (
 // New will return a new Tree
 // sz is the size (in bytes) to initially allocate for this db
 func New(sz int64) (t *Tree) {
-	bs := newBytes()
+	bs := backend.NewBytes()
 	// The only error that can return is ErrCannotAllocate which will not occur for a simple Bytes backend
-	t, _ = NewRaw(sz, bs.grow, nil)
+	t, _ = NewRaw(sz, bs)
 	return
 }
 
 // NewMMAP will return a new MMAP Tree
 // sz is the size (in bytes) to initially allocate for this db
 func NewMMAP(dir, name string, sz int64) (t *Tree, err error) {
-	var mm *MMap
-	if mm, err = newMMap(dir, name); err != nil {
+	var mm *backend.MMap
+	if mm, err = backend.NewMMap(dir, name); err != nil {
 		return
 	}
 
-	return NewRaw(sz, mm.grow, mm.Close)
+	return NewRaw(sz, mm)
 }
 
 // NewRaw will return a new Tree with the provided size, grow func, and close func
 // sz is the size (in bytes) to initially allocate for this db
 // gfn is the function to call on grows
 // cfn is the function to call on close (optional)
-func NewRaw(sz int64, gfn GrowFn, cfn CloseFn) (tp *Tree, err error) {
+func NewRaw(sz int64, b backend.Backend) (tp *Tree, err error) {
 	var t Tree
-	t.gfn = gfn
-	t.cfn = cfn
+	t.b = b
 
 	if sz < trunkSize {
 		sz = trunkSize
 	}
 
-	if t.bs = t.gfn(sz); int64(len(t.bs)) < sz {
+	if t.bs = t.b.Grow(sz); int64(len(t.bs)) < sz {
 		err = ErrCannotAllocate
 		return
 	}
@@ -89,8 +89,7 @@ type Tree struct {
 	bs []byte
 	t  *trunk
 
-	gfn GrowFn
-	cfn CloseFn
+	b backend.Backend
 }
 
 // getHead will get the very first item starting from a given node
@@ -338,7 +337,7 @@ func (t *Tree) grow(sz int64) (grew bool) {
 		return
 	}
 
-	t.bs = t.gfn(sz)
+	t.bs = t.b.Grow(sz)
 	t.setLabel()
 	return true
 }
@@ -962,11 +961,7 @@ func (t *Tree) Len() (n int) {
 
 // Close will close a tree
 func (t *Tree) Close() (err error) {
-	if t.cfn == nil {
-		return
-	}
-
-	return t.cfn()
+	return t.b.Close()
 }
 
 func isBlack(b *Block) bool {
