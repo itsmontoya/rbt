@@ -252,6 +252,7 @@ func BenchmarkTreeForEach(b *testing.B) {
 	b.ReportAllocs()
 }
 
+/*
 func BenchmarkTreeMMapGet(b *testing.B) {
 	benchMMAPGet(b, testSortedListStr)
 	b.ReportAllocs()
@@ -281,7 +282,7 @@ func BenchmarkTreeMMapForEach(b *testing.B) {
 	benchMMAPForEach(b, testSortedListStr)
 	b.ReportAllocs()
 }
-
+*/
 func BenchmarkMapGet(b *testing.B) {
 	benchMapGet(b, testSortedListStr)
 	b.ReportAllocs()
