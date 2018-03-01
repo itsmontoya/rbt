@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"unsafe"
 
+	"github.com/itsmontoya/rbt/allocator"
 	"github.com/itsmontoya/rbt/backend"
 	"github.com/missionMeteora/toolkit/errors"
 )
@@ -61,35 +62,34 @@ func NewMMAP(dir, name string, sz int64) (t *Tree, err error) {
 func NewRaw(sz int64, b backend.Backend) (tp *Tree, err error) {
 	var t Tree
 	t.b = b
-
+	t.a = allocator.NewSimple(b, sz)
 	if sz < trunkSize {
 		sz = trunkSize
 	}
 
-	if t.bs = t.b.Grow(sz); int64(len(t.bs)) < sz {
-		err = ErrCannotAllocate
-		return
+	t.a.Grow(sz)
+	if t.a.Len() == 0 {
+		t.a.Allocate(trunkSize)
 	}
 
-	t.setLabel()
+	t.setTrunk()
 	// Check if trunk has been initialized
-	if t.t.tail == 0 {
+	if t.t.root == 0 {
 		// trunk has not been set, set inital values
 		t.t.root = -1
-		t.t.tail = trunkSize
-		t.t.cap = sz
+		t.t.cnt = 0
 	}
 
+	t.a.OnPostGrow(t.setTrunk)
 	tp = &t
 	return
 }
 
 // Tree is a red-black tree data structure
 type Tree struct {
-	bs []byte
-	t  *trunk
-
+	t *trunk
 	b backend.Backend
+	a allocator.Allocator
 }
 
 // getHead will get the very first item starting from a given node
@@ -155,21 +155,19 @@ func (t *Tree) getBlock(offset int64) (b *Block) {
 		return
 	}
 
-	return (*Block)(unsafe.Pointer(&t.bs[offset]))
+	return (*Block)(unsafe.Pointer(t.a.Byte(offset)))
 }
 
 func (t *Tree) getKey(b *Block) (key []byte) {
-	return t.bs[b.blobOffset : b.blobOffset+b.keyLen]
+	return t.a.Bytes(b.blobOffset, b.keyLen)
 }
 
 func (t *Tree) getValue(b *Block) (value []byte) {
-	valueIndex := b.blobOffset + b.keyLen
-	return t.bs[valueIndex : valueIndex+b.valLen]
+	return t.a.Bytes(b.blobOffset+b.keyLen, b.valLen)
 }
 
-func (t *Tree) setLabel() {
-	t.t = (*trunk)(unsafe.Pointer(&t.bs[0]))
-	t.t.cap = int64(len(t.bs))
+func (t *Tree) setTrunk() {
+	t.t = (*trunk)(unsafe.Pointer(t.a.First()))
 }
 
 func (t *Tree) setParentChild(b, parent, child *Block) {
@@ -188,7 +186,7 @@ func (t *Tree) setBlob(b *Block, key, value []byte) (grew bool) {
 	if valLen == b.valLen {
 		blobIndex := b.offset + blockSize
 		valueIndex := blobIndex + b.keyLen
-		copy(t.bs[valueIndex:], value)
+		copy(t.a.Bytes(valueIndex, b.valLen), value)
 		return
 	}
 
@@ -218,21 +216,21 @@ func (t *Tree) growBlob(b *Block, key []byte, sz int64) (grew bool) {
 	}
 
 	delta := vlen - b.valLen
-
-	offset := b.offset
-	boffset := t.t.tail
 	blobLen := int64(len(key)) + vlen
-	if grew = t.grow(boffset + blobLen); grew {
+	offset := b.offset
+
+	var boffset int64
+	if boffset, grew = t.a.Allocate(blobLen); grew {
 		b = t.getBlock(offset)
 	}
 
 	value := t.getValue(b)
-	copy(t.bs[boffset:], key)
-	copy(t.bs[boffset+b.keyLen:], value)
-	t.t.tail += blobLen
+	bs := t.a.Bytes(boffset, blobLen)
+	copy(bs, key)
+	copy(bs[b.keyLen:], value)
 
-	for i := t.t.tail - delta; i < t.t.tail; i++ {
-		t.bs[i] = 0
+	for i := len(bs) - int(delta); i < len(bs); i++ {
+		bs[i] = 0
 	}
 
 	b.blobOffset = boffset
@@ -241,10 +239,8 @@ func (t *Tree) growBlob(b *Block, key []byte, sz int64) (grew bool) {
 }
 
 func (t *Tree) newBlock(key []byte) (b *Block, offset int64, grew bool) {
-	offset = t.t.tail
-	grew = t.grow(offset + blockSize)
+	offset, grew = t.a.Allocate(blockSize)
 	b = t.getBlock(offset)
-	t.t.tail += blockSize
 
 	// All new blocks start as red
 	b.c = colorRed
@@ -264,12 +260,11 @@ func (t *Tree) newBlock(key []byte) (b *Block, offset int64, grew bool) {
 }
 
 func (t *Tree) newBlob(key, value []byte) (offset int64, grew bool) {
-	offset = t.t.tail
 	blobLen := int64(len(key) + len(value))
-	grew = t.grow(offset + blobLen)
-	copy(t.bs[offset:], key)
-	copy(t.bs[offset+int64(len(key)):], value)
-	t.t.tail += blobLen
+	offset, grew = t.a.Allocate(blobLen)
+	bs := t.a.Bytes(offset, blobLen)
+	copy(bs, key)
+	copy(bs[int64(len(key)):], value)
 	return
 }
 
@@ -330,16 +325,6 @@ func (t *Tree) seekBlock(startOffset int64, key []byte, create bool) (offset int
 	}
 
 	return
-}
-
-func (t *Tree) grow(sz int64) (grew bool) {
-	if t.t.cap > sz {
-		return
-	}
-
-	t.bs = t.b.Grow(sz)
-	t.setLabel()
-	return true
 }
 
 func (t *Tree) balance(b *Block) {
@@ -742,6 +727,7 @@ func (t *Tree) replace(old, new, parent *Block) {
 	case childRoot:
 		// If block is root, we need to update the trunk's reference to root
 		t.t.root = noffset
+		t.t.cnt = 0
 	case childLeft:
 		parent.children[0] = noffset
 	case childRight:
@@ -860,6 +846,7 @@ func (t *Tree) Delete(key []byte) {
 	}
 
 	b = t.getBlock(offset)
+
 	parent := t.getBlock(b.parent)
 	hasLeft := b.children[0] != -1
 	hasRight := b.children[1] != -1
@@ -950,7 +937,7 @@ func (t *Tree) Grow(key []byte, sz int64) (bs []byte) {
 
 // Reset will clear the tree and keep the backend. Can be used as a fresh store
 func (t *Tree) Reset() {
-	t.t.tail = trunkSize
+	t.a.Reset()
 	t.t.root = -1
 }
 

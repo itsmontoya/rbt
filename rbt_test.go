@@ -28,16 +28,8 @@ var (
 	testCznicVal interface{}
 )
 
-func TestForEach(t *testing.T) {
-	w := New(1024)
-	w.ForEach(func(k, v []byte) (end bool) {
-		journaler.Debug("uh shit?")
-		return
-	})
-}
-
 func TestRootDelete(t *testing.T) {
-	w := New(1024)
+	w := New(64)
 	k := []byte("hello")
 	v := []byte("world")
 	w.Put(k, v)
@@ -51,6 +43,14 @@ func TestRootDelete(t *testing.T) {
 	if val := string(w.Get(k)); len(val) != 0 {
 		t.Fatalf("invalid value, expected \"%s\" and received \"%s\"", "", val)
 	}
+}
+
+func TestForEach(t *testing.T) {
+	w := New(1024)
+	w.ForEach(func(k, v []byte) (end bool) {
+		journaler.Debug("uh shit?")
+		return
+	})
 }
 
 func TestDelete(t *testing.T) {
