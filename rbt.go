@@ -24,13 +24,11 @@ const (
 	childRight
 )
 
-// Note: These have to be variables in order to be referenced
-var (
-	trunkSizePtr = unsafe.Sizeof(trunk{})
-	blockSizePtr = unsafe.Sizeof(Block{})
-
-	trunkSize = *(*int64)(unsafe.Pointer(&trunkSizePtr))
-	blockSize = *(*int64)(unsafe.Pointer(&blockSizePtr))
+const (
+	// TrunkSize is the size (in bytes) of the trunks
+	TrunkSize = int64(unsafe.Sizeof(trunk{}))
+	// BlockSize is the size (in bytes) of the Blocks
+	BlockSize = int64(unsafe.Sizeof(Block{}))
 )
 
 // New will return a new Tree
@@ -62,8 +60,8 @@ func NewRaw(sz int64, gfn GrowFn, cfn CloseFn) (tp *Tree, err error) {
 	t.gfn = gfn
 	t.cfn = cfn
 
-	if sz < trunkSize {
-		sz = trunkSize
+	if sz < TrunkSize {
+		sz = TrunkSize
 	}
 
 	if t.bs = t.gfn(sz); int64(len(t.bs)) < sz {
@@ -76,7 +74,7 @@ func NewRaw(sz int64, gfn GrowFn, cfn CloseFn) (tp *Tree, err error) {
 	if t.t.tail == 0 {
 		// trunk has not been set, set inital values
 		t.t.root = -1
-		t.t.tail = trunkSize
+		t.t.tail = TrunkSize
 		t.t.cap = sz
 	}
 
@@ -187,7 +185,7 @@ func (t *Tree) setParentChild(b, parent, child *Block) {
 func (t *Tree) setBlob(b *Block, key, value []byte) (grew bool) {
 	valLen := int64(len(value))
 	if valLen == b.valLen {
-		blobIndex := b.offset + blockSize
+		blobIndex := b.offset + BlockSize
 		valueIndex := blobIndex + b.keyLen
 		copy(t.bs[valueIndex:], value)
 		return
@@ -243,9 +241,9 @@ func (t *Tree) growBlob(b *Block, key []byte, sz int64) (grew bool) {
 
 func (t *Tree) newBlock(key []byte) (b *Block, offset int64, grew bool) {
 	offset = t.t.tail
-	grew = t.grow(offset + blockSize)
+	grew = t.grow(offset + BlockSize)
 	b = t.getBlock(offset)
-	t.t.tail += blockSize
+	t.t.tail += BlockSize
 
 	// All new blocks start as red
 	b.c = colorRed
@@ -951,7 +949,7 @@ func (t *Tree) Grow(key []byte, sz int64) (bs []byte) {
 
 // Reset will clear the tree and keep the backend. Can be used as a fresh store
 func (t *Tree) Reset() {
-	t.t.tail = trunkSize
+	t.t.tail = TrunkSize
 	t.t.root = -1
 }
 
