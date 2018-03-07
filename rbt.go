@@ -960,6 +960,11 @@ func (t *Tree) Len() (n int) {
 	return int(t.t.cnt)
 }
 
+// Size will return the number of bytes currently being utilized (not total allocated bytes)
+func (t *Tree) Size() int64 {
+	return t.t.tail
+}
+
 // Close will close a tree
 func (t *Tree) Close() (err error) {
 	if t.cfn == nil {
