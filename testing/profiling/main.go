@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/itsmontoya/rbt"
 	"github.com/missionMeteora/journaler"
 
 	"github.com/pkg/profile"
@@ -24,7 +25,7 @@ func main() {
 
 	for i := 0; i < 1000; i++ {
 		for _, kv := range strs {
-			tr.Put(kv.key, kv.val)
+			tr.Put(kv.val, kv.val)
 		}
 	}
 }
