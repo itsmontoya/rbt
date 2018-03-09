@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"unsafe"
 
+	"github.com/itsmontoya/rbt/backend"
 	"github.com/missionMeteora/toolkit/errors"
 )
 
@@ -34,9 +35,9 @@ const (
 // New will return a new Tree
 // sz is the size (in bytes) to initially allocate for this db
 func New(sz int64) (t *Tree) {
-	bs := newBytes()
+	bs := backend.NewBytes(sz)
 	// The only error that can return is ErrCannotAllocate which will not occur for a simple Bytes backend
-	t, _ = NewRaw(sz, bs.grow, nil)
+	t, _ = NewRaw(sz, bs)
 	return
 }
 
@@ -48,23 +49,22 @@ func NewMMAP(dir, name string, sz int64) (t *Tree, err error) {
 		return
 	}
 
-	return NewRaw(sz, mm.grow, mm.Close)
+	mm.Close()
+	return NewRaw(sz, nil)
 }
 
 // NewRaw will return a new Tree with the provided size, grow func, and close func
 // sz is the size (in bytes) to initially allocate for this db
 // gfn is the function to call on grows
 // cfn is the function to call on close (optional)
-func NewRaw(sz int64, gfn GrowFn, cfn CloseFn) (tp *Tree, err error) {
+func NewRaw(sz int64, b backend.Backend) (tp *Tree, err error) {
 	var t Tree
-	t.gfn = gfn
-	t.cfn = cfn
-
+	t.b = b
 	if sz < TrunkSize {
 		sz = TrunkSize
 	}
 
-	if t.bs = t.gfn(sz); int64(len(t.bs)) < sz {
+	if t.s, _ = t.b.Allocate(sz); int64(len(t.s.Bytes)) < sz {
 		err = ErrCannotAllocate
 		return
 	}
@@ -84,11 +84,10 @@ func NewRaw(sz int64, gfn GrowFn, cfn CloseFn) (tp *Tree, err error) {
 
 // Tree is a red-black tree data structure
 type Tree struct {
-	bs []byte
-	t  *trunk
+	b backend.Backend
+	s *backend.Section
 
-	gfn GrowFn
-	cfn CloseFn
+	t *trunk
 }
 
 // getHead will get the very first item starting from a given node
@@ -154,21 +153,21 @@ func (t *Tree) getBlock(offset int64) (b *Block) {
 		return
 	}
 
-	return (*Block)(unsafe.Pointer(&t.bs[offset]))
+	return (*Block)(unsafe.Pointer(&t.s.Bytes[offset]))
 }
 
 func (t *Tree) getKey(b *Block) (key []byte) {
-	return t.bs[b.blobOffset : b.blobOffset+b.keyLen]
+	return t.s.Bytes[b.blobOffset : b.blobOffset+b.keyLen]
 }
 
 func (t *Tree) getValue(b *Block) (value []byte) {
 	valueIndex := b.blobOffset + b.keyLen
-	return t.bs[valueIndex : valueIndex+b.valLen]
+	return t.s.Bytes[valueIndex : valueIndex+b.valLen]
 }
 
 func (t *Tree) setLabel() {
-	t.t = (*trunk)(unsafe.Pointer(&t.bs[0]))
-	t.t.cap = int64(len(t.bs))
+	t.t = (*trunk)(unsafe.Pointer(&t.s.Bytes[0]))
+	t.t.cap = int64(len(t.s.Bytes))
 }
 
 func (t *Tree) setParentChild(b, parent, child *Block) {
@@ -187,7 +186,7 @@ func (t *Tree) setBlob(b *Block, key, value []byte) (grew bool) {
 	if valLen == b.valLen {
 		blobIndex := b.offset + BlockSize
 		valueIndex := blobIndex + b.keyLen
-		copy(t.bs[valueIndex:], value)
+		copy(t.s.Bytes[valueIndex:], value)
 		return
 	}
 
@@ -226,12 +225,12 @@ func (t *Tree) growBlob(b *Block, key []byte, sz int64) (grew bool) {
 	}
 
 	value := t.getValue(b)
-	copy(t.bs[boffset:], key)
-	copy(t.bs[boffset+b.keyLen:], value)
+	copy(t.s.Bytes[boffset:], key)
+	copy(t.s.Bytes[boffset+b.keyLen:], value)
 	t.t.tail += blobLen
 
 	for i := t.t.tail - delta; i < t.t.tail; i++ {
-		t.bs[i] = 0
+		t.s.Bytes[i] = 0
 	}
 
 	b.blobOffset = boffset
@@ -266,8 +265,8 @@ func (t *Tree) newBlob(key, value []byte) (offset int64, grew bool) {
 	offset = t.t.tail
 	blobLen := int64(len(key) + len(value))
 	grew = t.grow(offset + blobLen)
-	copy(t.bs[offset:], key)
-	copy(t.bs[offset+int64(len(key)):], value)
+	copy(t.s.Bytes[offset:], key)
+	copy(t.s.Bytes[offset+int64(len(key)):], value)
 	t.t.tail += blobLen
 	return
 }
@@ -336,7 +335,15 @@ func (t *Tree) grow(sz int64) (grew bool) {
 		return
 	}
 
-	t.bs = t.gfn(sz)
+	var ns *backend.Section
+	if ns, grew = t.b.Allocate(sz); grew {
+		t.s.Bytes = t.b.Get(t.s.Offset, t.s.Size)
+	}
+
+	copy(ns.Bytes, t.s.Bytes)
+	t.b.Release(t.s)
+	t.s = ns
+
 	t.setLabel()
 	return true
 }
@@ -965,11 +972,13 @@ func (t *Tree) Size() int64 {
 
 // Close will close a tree
 func (t *Tree) Close() (err error) {
-	if t.cfn == nil {
-		return
+	if t.s == nil {
+		return errors.ErrIsClosed
 	}
 
-	return t.cfn()
+	t.b.Release(t.s)
+	t.s = nil
+	return
 }
 
 func isBlack(b *Block) bool {
