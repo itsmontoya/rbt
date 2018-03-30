@@ -5,6 +5,9 @@ import (
 	"unsafe"
 
 	"github.com/itsmontoya/rbt/backend"
+
+	"github.com/itsmontoya/rbt/allocator"
+	"github.com/missionMeteora/journaler"
 	"github.com/missionMeteora/toolkit/errors"
 )
 
@@ -35,41 +38,51 @@ const (
 // New will return a new Tree
 // sz is the size (in bytes) to initially allocate for this db
 func New(sz int64) (t *Tree) {
-	bs := backend.NewBytes(sz)
-	// The only error that can return is ErrCannotAllocate which will not occur for a simple Bytes backend
-	t, _ = NewRaw(sz, bs)
+	bs := allocator.NewBytes(sz)
+	// The only error that can return is ErrCannotAllocate which will not occur for a simple Bytes allocator
+	t, _ = NewRaw(sz, backend.NewMulti(bs).Get(), bs)
 	return
 }
 
 // NewMMAP will return a new MMAP Tree
 // sz is the size (in bytes) to initially allocate for this db
 func NewMMAP(dir, name string, sz int64) (t *Tree, err error) {
-	var mm *MMap
-	if mm, err = newMMap(dir, name); err != nil {
+	var mm *allocator.MMap
+	if mm, err = allocator.NewMMap(dir, name); err != nil {
 		return
 	}
 
-	mm.Close()
-	return NewRaw(sz, nil)
+	var multi *backend.Multi
+	multi = backend.NewMulti(mm)
+	if t, err = NewRaw(sz, multi.Get(), mm); err != nil {
+		return
+	}
+
+	return
 }
 
 // NewRaw will return a new Tree with the provided size, grow func, and close func
 // sz is the size (in bytes) to initially allocate for this db
 // gfn is the function to call on grows
 // cfn is the function to call on close (optional)
-func NewRaw(sz int64, b backend.Backend) (tp *Tree, err error) {
+func NewRaw(sz int64, b *backend.Backend, a allocator.Allocator) (tp *Tree, err error) {
 	var t Tree
 	t.b = b
+	t.a = a
+
 	if sz < TrunkSize {
 		sz = TrunkSize
 	}
 
-	if t.s, _ = t.b.Allocate(sz); int64(len(t.s.Bytes)) < sz {
+	if t.bs = t.b.Grow(sz); int64(len(t.bs)) < sz {
 		err = ErrCannotAllocate
 		return
 	}
 
 	t.setLabel()
+
+	t.a.OnGrow(t.onGrow)
+
 	// Check if trunk has been initialized
 	if t.t.tail == 0 {
 		// trunk has not been set, set inital values
@@ -84,10 +97,22 @@ func NewRaw(sz int64, b backend.Backend) (tp *Tree, err error) {
 
 // Tree is a red-black tree data structure
 type Tree struct {
-	b backend.Backend
-	s *backend.Section
+	m *backend.Multi
+	// Tree backend
+	b *backend.Backend
+	// Blob allocator
+	a allocator.Allocator
+
+	// Tree bytes (Trunk and blocks)
+	bs []byte
 
 	t *trunk
+}
+
+func (t *Tree) onGrow() {
+	t.b.SetBytes()
+	t.bs = t.b.Bytes()
+	t.setLabel()
 }
 
 // getHead will get the very first item starting from a given node
@@ -153,21 +178,26 @@ func (t *Tree) getBlock(offset int64) (b *Block) {
 		return
 	}
 
-	return (*Block)(unsafe.Pointer(&t.s.Bytes[offset]))
+	return (*Block)(unsafe.Pointer(&t.bs[offset]))
 }
 
 func (t *Tree) getKey(b *Block) (key []byte) {
-	return t.s.Bytes[b.blobOffset : b.blobOffset+b.keyLen]
+	return t.a.Get(b.blobOffset, b.keyLen)
 }
 
 func (t *Tree) getValue(b *Block) (value []byte) {
 	valueIndex := b.blobOffset + b.keyLen
-	return t.s.Bytes[valueIndex : valueIndex+b.valLen]
+	return t.a.Get(valueIndex, b.valLen)
 }
 
 func (t *Tree) setLabel() {
-	t.t = (*trunk)(unsafe.Pointer(&t.s.Bytes[0]))
-	t.t.cap = int64(len(t.s.Bytes))
+	t.t = (*trunk)(unsafe.Pointer(&t.bs[0]))
+	t.t.cap = int64(len(t.bs))
+}
+
+// PrintTrunk will print the trunk
+func (t *Tree) PrintTrunk() {
+	journaler.Debug("Trunk: %#v / %d", t.t, len(t.bs))
 }
 
 func (t *Tree) setParentChild(b, parent, child *Block) {
@@ -183,16 +213,20 @@ func (t *Tree) setParentChild(b, parent, child *Block) {
 
 func (t *Tree) setBlob(b *Block, key, value []byte) (grew bool) {
 	valLen := int64(len(value))
-	if valLen == b.valLen {
-		blobIndex := b.offset + BlockSize
-		valueIndex := blobIndex + b.keyLen
-		copy(t.s.Bytes[valueIndex:], value)
-		return
-	}
+
+	// TODO: Decrement block and release here (if users is at 0)
+	//	if valLen == b.valLen {
+	//		blobIndex := b.offset + BlockSize
+	//		valueIndex := blobIndex + b.keyLen
+	//		return
+	//	}
 
 	var offset, boffset int64
 	offset = b.offset
 	if boffset, grew = t.newBlob(key, value); grew {
+		t.b.SetBytes()
+		t.bs = t.b.Bytes()
+		t.setLabel()
 		b = t.getBlock(offset)
 	}
 
@@ -215,25 +249,23 @@ func (t *Tree) growBlob(b *Block, key []byte, sz int64) (grew bool) {
 		vlen *= 2
 	}
 
-	delta := vlen - b.valLen
-
 	offset := b.offset
-	boffset := t.t.tail
 	blobLen := int64(len(key)) + vlen
-	if grew = t.grow(boffset + blobLen); grew {
+
+	var s *allocator.Section
+	if s, grew = t.a.Allocate(blobLen); grew {
 		b = t.getBlock(offset)
 	}
 
 	value := t.getValue(b)
-	copy(t.s.Bytes[boffset:], key)
-	copy(t.s.Bytes[boffset+b.keyLen:], value)
-	t.t.tail += blobLen
+	copy(s.Bytes, key)
+	copy(s.Bytes[b.keyLen:], value)
 
-	for i := t.t.tail - delta; i < t.t.tail; i++ {
-		t.s.Bytes[i] = 0
+	for i := b.keyLen + b.valLen; i < s.Size; i++ {
+		s.Bytes[i] = 0
 	}
 
-	b.blobOffset = boffset
+	b.blobOffset = s.Offset
 	b.valLen = vlen
 	return
 }
@@ -262,12 +294,12 @@ func (t *Tree) newBlock(key []byte) (b *Block, offset int64, grew bool) {
 }
 
 func (t *Tree) newBlob(key, value []byte) (offset int64, grew bool) {
-	offset = t.t.tail
+	var s *allocator.Section
 	blobLen := int64(len(key) + len(value))
-	grew = t.grow(offset + blobLen)
-	copy(t.s.Bytes[offset:], key)
-	copy(t.s.Bytes[offset+int64(len(key)):], value)
-	t.t.tail += blobLen
+	s, grew = t.a.Allocate(blobLen)
+	offset = s.Offset
+	copy(s.Bytes, key)
+	copy(s.Bytes[int64(len(key)):], value)
 	return
 }
 
@@ -335,15 +367,7 @@ func (t *Tree) grow(sz int64) (grew bool) {
 		return
 	}
 
-	var ns *backend.Section
-	if ns, grew = t.b.Allocate(sz); grew {
-		t.s.Bytes = t.b.Get(t.s.Offset, t.s.Size)
-	}
-
-	copy(ns.Bytes, t.s.Bytes)
-	t.b.Release(t.s)
-	t.s = ns
-
+	t.bs = t.b.Grow(sz)
 	t.setLabel()
 	return true
 }
@@ -954,7 +978,7 @@ func (t *Tree) Grow(key []byte, sz int64) (bs []byte) {
 	return
 }
 
-// Reset will clear the tree and keep the backend. Can be used as a fresh store
+// Reset will clear the tree and keep the allocator. Can be used as a fresh store
 func (t *Tree) Reset() {
 	t.t.tail = TrunkSize
 	t.t.root = -1
@@ -970,14 +994,24 @@ func (t *Tree) Size() int64 {
 	return t.t.tail
 }
 
-// Close will close a tree
-func (t *Tree) Close() (err error) {
-	if t.s == nil {
+// Destroy will destroy a tree
+func (t *Tree) Destroy() (err error) {
+	if t.b == nil {
 		return errors.ErrIsClosed
 	}
 
-	t.b.Release(t.s)
-	t.s = nil
+	err = t.b.Destroy()
+	t.b = nil
+	return
+}
+
+// Close will close a tree
+func (t *Tree) Close() (err error) {
+	if t.b == nil {
+		return errors.ErrIsClosed
+	}
+
+	t.b = nil
 	return
 }
 

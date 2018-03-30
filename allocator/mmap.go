@@ -1,4 +1,4 @@
-package rbt
+package allocator
 
 import (
 	"os"
@@ -9,8 +9,8 @@ import (
 	"github.com/missionMeteora/toolkit/errors"
 )
 
-// newMMap will return a new Mmap
-func newMMap(dir, name string) (mp *MMap, err error) {
+// NewMMap will return a new Mmap
+func NewMMap(dir, name string) (mp *MMap, err error) {
 	var m MMap
 	if m.f, err = os.OpenFile(path.Join(dir, name), os.O_CREATE|os.O_RDWR, 0644); err != nil {
 		return
@@ -22,9 +22,13 @@ func newMMap(dir, name string) (mp *MMap, err error) {
 
 // MMap manages the memory mapped file
 type MMap struct {
-	f   *os.File
-	mm  mmap.MMap
-	cap int64
+	f  *os.File
+	mm mmap.MMap
+
+	tail int64
+	cap  int64
+
+	onGrow []func()
 }
 
 func (m *MMap) unmap() (err error) {
@@ -35,7 +39,8 @@ func (m *MMap) unmap() (err error) {
 	return m.mm.Unmap()
 }
 
-func (m *MMap) grow(sz int64) (bs []byte) {
+// Grow will grow the underlying MMap file
+func (m *MMap) Grow(sz int64) (grew bool) {
 	var err error
 	if m.cap == 0 {
 		var fi os.FileInfo
@@ -49,7 +54,7 @@ func (m *MMap) grow(sz int64) (bs []byte) {
 		}
 	}
 
-	for m.cap < sz {
+	for m.cap <= sz {
 		m.cap *= 2
 	}
 
@@ -68,7 +73,55 @@ func (m *MMap) grow(sz int64) (bs []byte) {
 		return
 	}
 
-	return m.mm
+	for _, fn := range m.onGrow {
+		fn()
+	}
+
+	return
+}
+
+// EnsureSize will ensure the tail is at least at the requested size or greater
+func (m *MMap) EnsureSize(sz int64) (grew bool) {
+	if m.tail >= sz {
+		return
+	}
+
+	m.tail = sz
+	return m.Grow(sz)
+}
+
+// Get will get bytes
+func (m *MMap) Get(offset, sz int64) []byte {
+	return m.mm[offset : offset+sz]
+}
+
+// Allocate will allocate bytes
+func (m *MMap) Allocate(sz int64) (sp *Section, grew bool) {
+	var s Section
+	s.Offset = m.tail
+	m.tail += sz
+	grew = m.Grow(m.tail)
+	s.Bytes = m.mm[s.Offset : s.Offset+sz]
+	s.Size = sz
+	m.OnGrow(s.getOnGrow(m))
+	sp = &s
+	return
+}
+
+// Release will release a section
+func (m *MMap) Release(s *Section) {
+	if s == nil {
+		return
+	}
+
+	s.destroy()
+	// Right now we just ignore it and let this grow
+	return
+}
+
+// OnGrow will append a function to be called on grows
+func (m *MMap) OnGrow(fn func()) {
+	m.onGrow = append(m.onGrow, fn)
 }
 
 // Close will close an MMap

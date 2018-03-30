@@ -100,7 +100,6 @@ func TestGrow(t *testing.T) {
 }
 
 func TestBasic(t *testing.T) {
-	return
 	var err error
 	if err = os.MkdirAll("./test_data", 0755); err != nil {
 		t.Fatal(err)
@@ -122,6 +121,8 @@ func TestBasic(t *testing.T) {
 	tr.Put([]byte("8"), []byte("8"))
 	tr.Put([]byte("9"), []byte("9"))
 	tr.Put([]byte("10"), []byte("10"))
+	// Manually notify until we merge rbt and whiskey
+	tr.b.Notify()
 
 	if val := string(tr.Get([]byte("1"))); val != "1" {
 		t.Fatalf("invalid value, expected \"%v\" and received \"%v\"", "1", val)

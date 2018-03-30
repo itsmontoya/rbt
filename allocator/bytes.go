@@ -1,4 +1,4 @@
-package backend
+package allocator
 
 // NewBytes will return a new byteslice backend
 func NewBytes(sz int64) *Bytes {
@@ -18,23 +18,38 @@ type Bytes struct {
 	tail int64
 	cap  int64
 
-	listeners []func() (unsub bool)
+	onGrow []func()
 }
 
-// grow will grow the bytes
-func (b *Bytes) grow() (grew bool) {
-	if b.tail < b.cap {
+// Grow will grow the bytes
+func (b *Bytes) Grow(sz int64) (grew bool) {
+	if sz < b.cap {
 		return
 	}
 
-	for b.cap < b.tail {
+	for b.cap <= sz {
 		b.cap *= 2
 	}
 
 	bs := make([]byte, b.cap)
 	copy(bs, b.bs)
 	b.bs = bs
+
+	for _, fn := range b.onGrow {
+		fn()
+	}
+
 	return true
+}
+
+// EnsureSize will ensure the tail is at least at the requested size or greater
+func (b *Bytes) EnsureSize(sz int64) (grew bool) {
+	if b.tail >= sz {
+		return
+	}
+
+	b.tail = sz
+	return b.Grow(sz)
 }
 
 // Get will get bytes
@@ -47,7 +62,7 @@ func (b *Bytes) Allocate(sz int64) (sp *Section, grew bool) {
 	var s Section
 	s.Offset = b.tail
 	b.tail += sz
-	grew = b.grow()
+	grew = b.Grow(b.tail)
 
 	s.Bytes = b.bs[s.Offset : s.Offset+sz]
 	s.Size = sz
@@ -57,8 +72,14 @@ func (b *Bytes) Allocate(sz int64) (sp *Section, grew bool) {
 
 // Release will release a section
 func (b *Bytes) Release(s *Section) {
+	s.destroy()
 	// Right now we just ignore it and let this grow
 	return
+}
+
+// OnGrow will append a function to be called on grows
+func (b *Bytes) OnGrow(fn func()) {
+	b.onGrow = append(b.onGrow, fn)
 }
 
 // Close will close bytes
