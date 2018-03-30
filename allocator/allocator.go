@@ -5,8 +5,8 @@ import (
 )
 
 const (
-	// PairSize is the size (in bytes) of the pair struct
-	PairSize = int64(unsafe.Sizeof(Pair{}))
+	// SectionSize is the size (in bytes) of the pair struct
+	SectionSize = int64(unsafe.Sizeof(Section{}))
 )
 
 // Allocator is a allocating interface
@@ -18,31 +18,12 @@ type Allocator interface {
 	EnsureSize(sz int64) (grew bool)
 
 	// Allocate will allocate a new section
-	Allocate(sz int64) (s *Section, grew bool)
+	Allocate(sz int64) (s Section, grew bool)
 	// Release will release a section (and it's bytes)
-	Release(*Section)
+	Release(Section)
 
 	// Function to be called on grow
 	OnGrow(fn func())
 
 	Close() (err error)
-}
-
-// Pair is a data section pair
-type Pair struct {
-	Offset int64
-	Size   int64
-}
-
-// IsEmpty will return if a pair is empty
-func (p *Pair) IsEmpty() bool {
-	if p.Offset != 0 {
-		return false
-	}
-
-	if p.Size != 0 {
-		return false
-	}
-
-	return true
 }

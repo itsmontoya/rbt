@@ -10,7 +10,7 @@ import (
 func NewMulti(a allocator.Allocator) *Multi {
 	var m Multi
 	m.a = a
-	m.a.EnsureSize(allocator.PairSize)
+	m.a.EnsureSize(allocator.SectionSize)
 	m.a.OnGrow(m.setPair)
 	m.setPair()
 	return &m
@@ -19,11 +19,11 @@ func NewMulti(a allocator.Allocator) *Multi {
 // Multi is a multiple backend manager
 type Multi struct {
 	a allocator.Allocator
-	p *allocator.Pair
+	s *allocator.Section
 }
 
 func (m *Multi) setPair() {
-	m.p = (*allocator.Pair)(unsafe.Pointer(&m.a.Get(0, 1)[0]))
+	m.s = (*allocator.Section)(unsafe.Pointer(&m.a.Get(0, 1)[0]))
 }
 
 // New will return a new backend
@@ -33,12 +33,12 @@ func (m *Multi) New() (b *Backend) {
 
 // Get will get the current backend
 func (m *Multi) Get() (b *Backend) {
-	if m.p == nil {
+	if m.s == nil {
 		return m.New()
 	}
 
 	b = New(m)
-	b.s.Pair = *m.p
+	b.s = *m.s
 	b.SetBytes()
 	return
 }
@@ -49,6 +49,6 @@ func (m *Multi) Set(b *Backend) {
 	// Segfaults are bad, and I should feel bad. *sad panda*
 	m.setPair()
 	// Set pair values
-	m.p.Offset = b.s.Pair.Offset
-	m.p.Size = b.s.Pair.Size
+	m.s.Offset = b.s.Offset
+	m.s.Size = b.s.Size
 }

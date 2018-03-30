@@ -96,24 +96,16 @@ func (m *MMap) Get(offset, sz int64) []byte {
 }
 
 // Allocate will allocate bytes
-func (m *MMap) Allocate(sz int64) (sp *Section, grew bool) {
-	var s Section
+func (m *MMap) Allocate(sz int64) (s Section, grew bool) {
 	s.Offset = m.tail
+	s.Size = sz
 	m.tail += sz
 	grew = m.Grow(m.tail)
-	s.Bytes = m.mm[s.Offset : s.Offset+sz]
-	s.Size = sz
-	m.OnGrow(s.getOnGrow(m))
-	sp = &s
 	return
 }
 
 // Release will release a section
-func (m *MMap) Release(s *Section) {
-	if s == nil {
-		return
-	}
-
+func (m *MMap) Release(s Section) {
 	s.destroy()
 	// Right now we just ignore it and let this grow
 	return

@@ -2,7 +2,6 @@ package backend
 
 import (
 	"github.com/itsmontoya/rbt/allocator"
-	"github.com/missionMeteora/journaler"
 	"github.com/missionMeteora/toolkit/errors"
 )
 
@@ -10,66 +9,64 @@ import (
 func New(m *Multi) *Backend {
 	var b Backend
 	b.m = m
-	b.s = &allocator.Section{}
 	m.a.OnGrow(b.SetBytes)
 	return &b
 }
 
 // Backend represents a data Backend
 type Backend struct {
-	m *Multi
-	s *allocator.Section
+	m  *Multi
+	s  allocator.Section
+	bs []byte
 }
 
 // SetBytes will refresh the bytes reference
 func (b *Backend) SetBytes() {
-	offset := b.s.Offset
-	journaler.Debug("Got offset!")
-	size := b.s.Size
-	journaler.Debug("Got size!")
-	b.s.Bytes = b.m.a.Get(offset, size)
-
-	journaler.Debug("Uhh ya.")
+	b.bs = b.m.a.Get(b.s.Offset, b.s.Size)
 }
 
 // Bytes are the current bytes
 func (b *Backend) Bytes() []byte {
-	return b.s.Bytes
+	return b.bs
 }
 
 // Section will return a section
 func (b *Backend) Section() allocator.Section {
-	return *b.s
+	return b.s
 }
 
-func (b *Backend) allocateSection(sz int64) (ns *allocator.Section, grew bool) {
-	ns, grew = b.m.a.Allocate(sz)
-	if b.s.Size == 0 {
-		return
-	}
-
-	if grew {
+func (b *Backend) allocate(sz int64) (bs []byte, grew bool) {
+	var ns allocator.Section
+	if ns, grew = b.m.a.Allocate(sz); grew {
 		b.SetBytes()
 	}
 
-	// Copy old bytes to new byteslice
-	copy(ns.Bytes, b.s.Bytes)
-	// Release old bytes to allocator
-	b.m.a.Release(b.s)
+	bs = b.m.a.Get(ns.Offset, ns.Size)
+
+	if b.s.Size > 0 {
+		// Copy old bytes to new byteslice
+		copy(bs, b.bs)
+		// Release old bytes to allocator
+		b.m.a.Release(b.s)
+	}
+
+	b.s = ns
+	b.bs = bs
 	return
 }
 
 // Grow will grow the backend
 func (b *Backend) Grow(sz int64) (bs []byte) {
 	if !b.s.IsEmpty() {
-		bs = b.s.Bytes
+		bs = b.m.a.Get(b.s.Offset, b.s.Size)
 	}
 
-	if cap := nextCap(b.s.Size, sz); cap > -1 {
-		b.s, _ = b.allocateSection(cap)
+	var cap int64
+	if cap = nextCap(b.s.Size, sz); cap == -1 {
+		return
 	}
 
-	bs = b.s.Bytes
+	b.allocate(cap)
 	return
 }
 
@@ -83,7 +80,7 @@ func (b *Backend) Dup() (out *Backend) {
 	out = New(b.m)
 	out.Grow(b.s.Size)
 	b.SetBytes()
-	copy(out.s.Bytes, b.s.Bytes)
+	copy(out.bs, b.bs)
 	return
 }
 
@@ -95,7 +92,6 @@ func (b *Backend) Destroy() (err error) {
 
 	b.m.a.Release(b.s)
 	b.m = nil
-	b.s = nil
 	return
 }
 
@@ -106,6 +102,5 @@ func (b *Backend) Close() (err error) {
 	}
 
 	b.m = nil
-	b.s = nil
 	return
 }

@@ -252,17 +252,18 @@ func (t *Tree) growBlob(b *Block, key []byte, sz int64) (grew bool) {
 	offset := b.offset
 	blobLen := int64(len(key)) + vlen
 
-	var s *allocator.Section
+	var s allocator.Section
 	if s, grew = t.a.Allocate(blobLen); grew {
 		b = t.getBlock(offset)
 	}
 
 	value := t.getValue(b)
-	copy(s.Bytes, key)
-	copy(s.Bytes[b.keyLen:], value)
+	bs := t.a.Get(s.Offset, s.Size)
+	copy(bs, key)
+	copy(bs[b.keyLen:], value)
 
 	for i := b.keyLen + b.valLen; i < s.Size; i++ {
-		s.Bytes[i] = 0
+		bs[i] = 0
 	}
 
 	b.blobOffset = s.Offset
@@ -294,12 +295,13 @@ func (t *Tree) newBlock(key []byte) (b *Block, offset int64, grew bool) {
 }
 
 func (t *Tree) newBlob(key, value []byte) (offset int64, grew bool) {
-	var s *allocator.Section
+	var s allocator.Section
 	blobLen := int64(len(key) + len(value))
 	s, grew = t.a.Allocate(blobLen)
 	offset = s.Offset
-	copy(s.Bytes, key)
-	copy(s.Bytes[int64(len(key)):], value)
+	bs := t.a.Get(s.Offset, s.Size)
+	copy(bs, key)
+	copy(bs[int64(len(key)):], value)
 	return
 }
 

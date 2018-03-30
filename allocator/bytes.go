@@ -58,20 +58,16 @@ func (b *Bytes) Get(offset, sz int64) []byte {
 }
 
 // Allocate will allocate bytes
-func (b *Bytes) Allocate(sz int64) (sp *Section, grew bool) {
-	var s Section
+func (b *Bytes) Allocate(sz int64) (s Section, grew bool) {
 	s.Offset = b.tail
+	s.Size = sz
 	b.tail += sz
 	grew = b.Grow(b.tail)
-
-	s.Bytes = b.bs[s.Offset : s.Offset+sz]
-	s.Size = sz
-	sp = &s
 	return
 }
 
 // Release will release a section
-func (b *Bytes) Release(s *Section) {
+func (b *Bytes) Release(s Section) {
 	s.destroy()
 	// Right now we just ignore it and let this grow
 	return
