@@ -35,8 +35,12 @@ func (b *Backend) Section() allocator.Section {
 	return b.s
 }
 
-func (b *Backend) allocate(sz int64) (bs []byte, grew bool) {
-	var ns allocator.Section
+func (b *Backend) allocate(sz int64) (bs []byte) {
+	var (
+		ns   allocator.Section
+		grew bool
+	)
+
 	if ns, grew = b.m.a.Allocate(sz); grew {
 		b.SetBytes()
 	}
@@ -66,7 +70,7 @@ func (b *Backend) Grow(sz int64) (bs []byte) {
 		return
 	}
 
-	b.allocate(cap)
+	bs = b.allocate(cap)
 	return
 }
 

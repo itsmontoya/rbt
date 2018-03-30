@@ -40,7 +40,12 @@ const (
 func New(sz int64) (t *Tree) {
 	bs := allocator.NewBytes(sz)
 	// The only error that can return is ErrCannotAllocate which will not occur for a simple Bytes allocator
-	t, _ = NewRaw(sz, backend.NewMulti(bs).Get(), bs)
+	var err error
+	if t, err = NewRaw(sz, backend.NewMulti(bs).Get(), bs); err != nil {
+		// We should never have an error for byteslice backend
+		panic(err)
+	}
+
 	return
 }
 
