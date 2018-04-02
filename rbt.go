@@ -71,6 +71,11 @@ func NewMMAP(dir, name string, sz int64) (t *Tree, err error) {
 // gfn is the function to call on grows
 // cfn is the function to call on close (optional)
 func NewRaw(sz int64, b *backend.Backend, a allocator.Allocator) (tp *Tree, err error) {
+	journaler.Debug("New raw: %p / %v", b, b == nil)
+	if b == nil || a == nil {
+		panic("uhh what?")
+	}
+
 	var t Tree
 	t.b = b
 	t.a = a
@@ -97,12 +102,12 @@ func NewRaw(sz int64, b *backend.Backend, a allocator.Allocator) (tp *Tree, err 
 	}
 
 	tp = &t
+	journaler.Debug("Tree created: %p / %p", tp, t.b)
 	return
 }
 
 // Tree is a red-black tree data structure
 type Tree struct {
-	m *backend.Multi
 	// Tree backend
 	b *backend.Backend
 	// Blob allocator
@@ -114,10 +119,16 @@ type Tree struct {
 	t *trunk
 }
 
-func (t *Tree) onGrow() {
-	t.b.SetBytes()
+func (t *Tree) onGrow() (end bool) {
+	if t.b == nil {
+		return true
+	}
+
+	journaler.Debug("On grow, getting bytes: %p / %p / %v", t, t.b, t.b == nil)
 	t.bs = t.b.Bytes()
 	t.setLabel()
+	journaler.Debug("Bytes set: %#v / %d", t.t, len(t.bs))
+	return
 }
 
 // getHead will get the very first item starting from a given node
@@ -181,6 +192,11 @@ func (t *Tree) getUncle(startOffset int64) (offset int64) {
 func (t *Tree) getBlock(offset int64) (b *Block) {
 	if offset == -1 {
 		return
+	}
+
+	if offset >= int64(len(t.bs)) {
+		journaler.Debug("Debug info: %#v", t.t)
+		journaler.Debug("Getting block at %d within a slice that has a length of %d", offset, len(t.bs))
 	}
 
 	return (*Block)(unsafe.Pointer(&t.bs[offset]))
@@ -1008,6 +1024,7 @@ func (t *Tree) Destroy() (err error) {
 	}
 
 	err = t.b.Destroy()
+	journaler.Debug("Destroying tree! %p", t)
 	t.b = nil
 	return
 }
@@ -1018,6 +1035,7 @@ func (t *Tree) Close() (err error) {
 		return errors.ErrIsClosed
 	}
 
+	journaler.Debug("Closing tree! %p", t)
 	t.b = nil
 	return
 }

@@ -28,7 +28,7 @@ type MMap struct {
 	tail int64
 	cap  int64
 
-	onGrow []func()
+	onGrow []OnGrowFn
 }
 
 func (m *MMap) unmap() (err error) {
@@ -112,7 +112,7 @@ func (m *MMap) Release(s Section) {
 }
 
 // OnGrow will append a function to be called on grows
-func (m *MMap) OnGrow(fn func()) {
+func (m *MMap) OnGrow(fn OnGrowFn) {
 	m.onGrow = append(m.onGrow, fn)
 }
 

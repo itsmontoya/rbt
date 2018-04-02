@@ -18,7 +18,7 @@ type Bytes struct {
 	tail int64
 	cap  int64
 
-	onGrow []func()
+	onGrow []OnGrowFn
 }
 
 // Grow will grow the bytes
@@ -74,7 +74,7 @@ func (b *Bytes) Release(s Section) {
 }
 
 // OnGrow will append a function to be called on grows
-func (b *Bytes) OnGrow(fn func()) {
+func (b *Bytes) OnGrow(fn OnGrowFn) {
 	b.onGrow = append(b.onGrow, fn)
 }
 

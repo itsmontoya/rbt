@@ -1,7 +1,9 @@
 package backend
 
 import (
+	"github.com/Path94/atoms"
 	"github.com/itsmontoya/rbt/allocator"
+	"github.com/missionMeteora/journaler"
 	"github.com/missionMeteora/toolkit/errors"
 )
 
@@ -9,7 +11,7 @@ import (
 func New(m *Multi) *Backend {
 	var b Backend
 	b.m = m
-	m.a.OnGrow(b.SetBytes)
+	m.a.OnGrow(b.onGrow)
 	return &b
 }
 
@@ -18,15 +20,29 @@ type Backend struct {
 	m  *Multi
 	s  allocator.Section
 	bs []byte
+
+	closed atoms.Bool
+}
+
+func (b *Backend) onGrow() (end bool) {
+	if b.closed.Get() {
+		return true
+	}
+
+	b.SetBytes()
+	return
 }
 
 // SetBytes will refresh the bytes reference
 func (b *Backend) SetBytes() {
+	//	journaler.Debug("Setting bytes")
 	b.bs = b.m.a.Get(b.s.Offset, b.s.Size)
+	//	journaler.Debug("Bytes set! %p / %d", b, len(b.bs))
 }
 
 // Bytes are the current bytes
 func (b *Backend) Bytes() []byte {
+	//	journaler.Debug("Getting bytes! %p / %v", b, b == nil)
 	return b.bs
 }
 
@@ -82,15 +98,17 @@ func (b *Backend) Notify() {
 // Dup will duplicate a backend
 func (b *Backend) Dup() (out *Backend) {
 	out = New(b.m)
+	b.m.a.OnGrow(out.onGrow)
 	out.Grow(b.s.Size)
 	b.SetBytes()
+	journaler.Debug("Oh yea? %#v / %d", b.s, len(b.bs), len(out.bs))
 	copy(out.bs, b.bs)
 	return
 }
 
 // Destroy will destroy a backend and it's contents
 func (b *Backend) Destroy() (err error) {
-	if b.m == nil {
+	if !b.closed.Set(true) {
 		return errors.ErrIsClosed
 	}
 
@@ -101,7 +119,7 @@ func (b *Backend) Destroy() (err error) {
 
 // Close will close an Backend
 func (b *Backend) Close() (err error) {
-	if b.m.a == nil {
+	if !b.closed.Set(true) {
 		return errors.ErrIsClosed
 	}
 

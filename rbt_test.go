@@ -213,15 +213,15 @@ func TestBasic(t *testing.T) {
 }
 
 func TestSortedPut(t *testing.T) {
-	testPut(t, testUtils.GetSorted(10))
+	testPut(t, testUtils.GetSorted(10000))
 }
 
 func TestReversePut(t *testing.T) {
-	testPut(t, testUtils.GetReverse(10))
+	testPut(t, testUtils.GetReverse(10000))
 }
 
 func TestRandomPut(t *testing.T) {
-	testPut(t, testUtils.GetRand(10))
+	testPut(t, testUtils.GetRand(10000))
 }
 
 func BenchmarkTreeGet(b *testing.B) {

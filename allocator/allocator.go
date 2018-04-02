@@ -23,7 +23,10 @@ type Allocator interface {
 	Release(Section)
 
 	// Function to be called on grow
-	OnGrow(fn func())
+	OnGrow(fn OnGrowFn)
 
 	Close() (err error)
 }
+
+// OnGrowFn is called on grow
+type OnGrowFn func() (end bool)
