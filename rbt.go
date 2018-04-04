@@ -14,6 +14,10 @@ import (
 const (
 	// ErrCannotAllocate is returned when Tree cannot allocate the bytes it needs
 	ErrCannotAllocate = errors.Error("cannot allocate needed bytes")
+	// ErrInvalidBackend is returned when the provided backend is nil
+	ErrInvalidBackend = errors.Error("invalid backend, cannot be nil")
+	// ErrInvalidAllocator is returned when the provided allocator is nil
+	ErrInvalidAllocator = errors.Error("invalid allocator, cannot be nil")
 )
 
 const (
@@ -71,9 +75,14 @@ func NewMMAP(dir, name string, sz int64) (t *Tree, err error) {
 // gfn is the function to call on grows
 // cfn is the function to call on close (optional)
 func NewRaw(sz int64, b *backend.Backend, a allocator.Allocator) (tp *Tree, err error) {
-	journaler.Debug("New raw: %p / %v", b, b == nil)
-	if b == nil || a == nil {
-		panic("uhh what?")
+	if b == nil {
+		err = ErrInvalidBackend
+		return
+	}
+
+	if a == nil {
+		err = ErrInvalidAllocator
+		return
 	}
 
 	var t Tree
@@ -102,7 +111,6 @@ func NewRaw(sz int64, b *backend.Backend, a allocator.Allocator) (tp *Tree, err 
 	}
 
 	tp = &t
-	journaler.Debug("Tree created: %p / %p", tp, t.b)
 	return
 }
 
@@ -124,10 +132,8 @@ func (t *Tree) onGrow() (end bool) {
 		return true
 	}
 
-	journaler.Debug("On grow, getting bytes: %p / %p / %v", t, t.b, t.b == nil)
 	t.bs = t.b.Bytes()
 	t.setLabel()
-	journaler.Debug("Bytes set: %#v / %d", t.t, len(t.bs))
 	return
 }
 
@@ -168,6 +174,9 @@ func (t *Tree) getTail(startOffset int64) (offset int64) {
 func (t *Tree) getUncle(startOffset int64) (offset int64) {
 	offset = -1
 	block := t.getBlock(startOffset)
+	if block.parent >= t.t.cap {
+		journaler.Debug("Debug info: %#v / %s / %s", block, string(t.getKey(block)), string(t.getValue(block)))
+	}
 	parent := t.getBlock(block.parent)
 	if parent == nil {
 		return
@@ -197,6 +206,7 @@ func (t *Tree) getBlock(offset int64) (b *Block) {
 	if offset >= int64(len(t.bs)) {
 		journaler.Debug("Debug info: %#v", t.t)
 		journaler.Debug("Getting block at %d within a slice that has a length of %d", offset, len(t.bs))
+		panic("invalid access")
 	}
 
 	return (*Block)(unsafe.Pointer(&t.bs[offset]))
@@ -1024,7 +1034,6 @@ func (t *Tree) Destroy() (err error) {
 	}
 
 	err = t.b.Destroy()
-	journaler.Debug("Destroying tree! %p", t)
 	t.b = nil
 	return
 }
@@ -1035,7 +1044,6 @@ func (t *Tree) Close() (err error) {
 		return errors.ErrIsClosed
 	}
 
-	journaler.Debug("Closing tree! %p", t)
 	t.b = nil
 	return
 }
