@@ -3,7 +3,6 @@ package backend
 import (
 	"github.com/Path94/atoms"
 	"github.com/itsmontoya/rbt/allocator"
-	"github.com/missionMeteora/journaler"
 	"github.com/missionMeteora/toolkit/errors"
 )
 
@@ -101,7 +100,6 @@ func (b *Backend) Dup() (out *Backend) {
 	b.m.a.OnGrow(out.onGrow)
 	out.Grow(b.s.Size)
 	b.SetBytes()
-	journaler.Debug("Oh yea? %#v / %d", b.s, len(b.bs), len(out.bs))
 	copy(out.bs, b.bs)
 	return
 }
