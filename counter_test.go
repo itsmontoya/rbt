@@ -32,6 +32,9 @@ func TestCounter(t *testing.T) {
 
 	c.Set(3)
 
+	c.Close()
+	c = newCounter(arr[:])
+
 	if n := c.Get(); n != 3 {
 		t.Fatalf("invalid value, expected %d and received %d", 3, n)
 	}
