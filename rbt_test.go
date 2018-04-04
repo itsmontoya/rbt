@@ -112,6 +112,7 @@ func TestBasic(t *testing.T) {
 	}
 
 	tr.Put([]byte("1"), []byte("1"))
+	tr.Put([]byte("1"), []byte("1"))
 	tr.Put([]byte("2"), []byte("2"))
 	tr.Put([]byte("3"), []byte("3"))
 	tr.Put([]byte("4"), []byte("4"))

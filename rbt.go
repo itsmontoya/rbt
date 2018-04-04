@@ -213,11 +213,11 @@ func (t *Tree) getBlock(offset int64) (b *Block) {
 }
 
 func (t *Tree) getKey(b *Block) (key []byte) {
-	return t.a.Get(b.blobOffset, b.keyLen)
+	return t.a.Get(b.blobOffset+8, b.keyLen)
 }
 
 func (t *Tree) getValue(b *Block) (value []byte) {
-	valueIndex := b.blobOffset + b.keyLen
+	valueIndex := b.blobOffset + b.keyLen + 8
 	return t.a.Get(valueIndex, b.valLen)
 }
 
@@ -242,15 +242,30 @@ func (t *Tree) setParentChild(b, parent, child *Block) {
 	}
 }
 
-func (t *Tree) setBlob(b *Block, key, value []byte) (grew bool) {
-	valLen := int64(len(value))
+func (t *Tree) releaseBlob(b *Block) {
+	journaler.Debug("Attempting to release blob: %d", b.blobOffset)
+	if b.blobOffset == -1 {
+		return
+	}
 
-	// TODO: Decrement block and release here (if users is at 0)
-	//	if valLen == b.valLen {
-	//		blobIndex := b.offset + BlockSize
-	//		valueIndex := blobIndex + b.keyLen
-	//		return
-	//	}
+	c := newCounter(t.a.Get(b.blobOffset, 8))
+	n := c.Decrement()
+	journaler.Debug("Decremented: %d", n)
+	if n > 0 {
+		return
+	}
+
+	var s allocator.Section
+	s.Offset = b.blobOffset
+	s.Size = 8 + b.keyLen + b.valLen
+	t.a.Release(s)
+	journaler.Debug("Actually released!")
+}
+
+func (t *Tree) setBlob(b *Block, key, value []byte) (grew bool) {
+	journaler.Debug("Setting blob: %s / %s", string(key), string(value))
+	valLen := int64(len(value))
+	t.releaseBlob(b)
 
 	var offset, boffset int64
 	offset = b.offset
@@ -327,12 +342,20 @@ func (t *Tree) newBlock(key []byte) (b *Block, offset int64, grew bool) {
 
 func (t *Tree) newBlob(key, value []byte) (offset int64, grew bool) {
 	var s allocator.Section
-	blobLen := int64(len(key) + len(value))
+	blobLen := int64(len(key)+len(value)) + 8
 	s, grew = t.a.Allocate(blobLen)
 	offset = s.Offset
 	bs := t.a.Get(s.Offset, s.Size)
-	copy(bs, key)
-	copy(bs[int64(len(key)):], value)
+
+	c := newCounter(bs)
+	// This is a new blob, set readers to one
+	c.Set(1)
+
+	copy(bs[8:], key)
+	copy(bs[int64(len(key))+8:], value)
+
+	cc := newCounter(bs)
+	journaler.Debug("Blob readers? %d / %d", c.Get(), cc.Get())
 	return
 }
 
