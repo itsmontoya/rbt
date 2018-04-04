@@ -3,6 +3,7 @@ package allocator
 import (
 	"os"
 	"path"
+	"sync"
 
 	"github.com/edsrzf/mmap-go"
 	"github.com/missionMeteora/journaler"
@@ -22,6 +23,8 @@ func NewMMap(dir, name string) (mp *MMap, err error) {
 
 // MMap manages the memory mapped file
 type MMap struct {
+	mux sync.RWMutex
+
 	f  *os.File
 	mm mmap.MMap
 
@@ -39,8 +42,16 @@ func (m *MMap) unmap() (err error) {
 	return m.mm.Unmap()
 }
 
-// Grow will grow the underlying MMap file
-func (m *MMap) Grow(sz int64) (grew bool) {
+// row will grow the underlying MMap file
+func (m *MMap) grow(sz int64) (grew bool) {
+	// TODO: Make m.cap atomic
+	if m.cap > sz {
+		return
+	}
+
+	m.mux.Lock()
+	defer m.mux.Unlock()
+
 	var err error
 	if m.cap == 0 {
 		var fi os.FileInfo
@@ -73,8 +84,22 @@ func (m *MMap) Grow(sz int64) (grew bool) {
 		return
 	}
 
+	return true
+}
+
+func (m *MMap) notify() {
+	m.mux.RLock()
+	defer m.mux.RUnlock()
+
 	for _, fn := range m.onGrow {
 		fn()
+	}
+}
+
+// Grow will grow the underlying MMap file
+func (m *MMap) Grow(sz int64) (grew bool) {
+	if grew = m.grow(sz); grew {
+		m.notify()
 	}
 
 	return
@@ -82,16 +107,20 @@ func (m *MMap) Grow(sz int64) (grew bool) {
 
 // EnsureSize will ensure the tail is at least at the requested size or greater
 func (m *MMap) EnsureSize(sz int64) (grew bool) {
+	// TODO: Make tail atomic
 	if m.tail >= sz {
 		return
 	}
 
 	m.tail = sz
-	return m.Grow(sz)
+	return m.grow(sz)
 }
 
 // Get will get bytes
 func (m *MMap) Get(offset, sz int64) []byte {
+	m.mux.RLock()
+	defer m.mux.RUnlock()
+
 	return m.mm[offset : offset+sz]
 }
 
@@ -118,6 +147,9 @@ func (m *MMap) OnGrow(fn OnGrowFn) {
 
 // Close will close an MMap
 func (m *MMap) Close() (err error) {
+	m.mux.Lock()
+	defer m.mux.Unlock()
+
 	if m.f == nil {
 		return errors.ErrIsClosed
 	}
