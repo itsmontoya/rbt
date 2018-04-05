@@ -243,14 +243,12 @@ func (t *Tree) setParentChild(b, parent, child *Block) {
 }
 
 func (t *Tree) releaseBlob(b *Block) {
-	journaler.Debug("Attempting to release blob: %d", b.blobOffset)
 	if b.blobOffset == -1 {
 		return
 	}
 
 	c := newCounter(t.a.Get(b.blobOffset, 8))
 	n := c.Decrement()
-	journaler.Debug("Decremented: %d", n)
 	if n > 0 {
 		return
 	}
@@ -263,7 +261,6 @@ func (t *Tree) releaseBlob(b *Block) {
 }
 
 func (t *Tree) setBlob(b *Block, key, value []byte) (grew bool) {
-	journaler.Debug("Setting blob: %s / %s", string(key), string(value))
 	valLen := int64(len(value))
 	t.releaseBlob(b)
 
@@ -353,9 +350,6 @@ func (t *Tree) newBlob(key, value []byte) (offset int64, grew bool) {
 
 	copy(bs[8:], key)
 	copy(bs[int64(len(key))+8:], value)
-
-	cc := newCounter(bs)
-	journaler.Debug("Blob readers? %d / %d", c.Get(), cc.Get())
 	return
 }
 
@@ -996,42 +990,6 @@ func (t *Tree) ForEach(fn ForEachFn) (ended bool) {
 
 	// Call iterate from root
 	return t.iterate(t.getBlock(t.t.root), fn)
-}
-
-// Grow will grow a blob value to a given size
-func (t *Tree) Grow(key []byte, sz int64) (bs []byte) {
-	var (
-		b      *Block
-		grew   bool
-		offset int64
-	)
-
-	if t.t.root == -1 {
-		// Root doesn't exist, we can create one
-		b, offset, _ = t.newBlock(key)
-		t.t.root = offset
-	} else {
-		// Find node whose key matches our provided key, if node does not exist - create it.
-		offset, grew = t.seekBlock(t.t.root, key, true)
-		b = t.getBlock(offset)
-	}
-
-	if grew = t.growBlob(b, key, sz); grew {
-		b = t.getBlock(offset)
-	}
-
-	// Balance tree after insert
-	// TODO: This can be moved into the node-creation portion
-	t.balance(b)
-
-	root := t.getBlock(t.t.root)
-	if root.ct != childRoot {
-		// Root has changed, update root reference to the new root
-		t.t.root = root.parent
-	}
-
-	bs = t.getValue(b)
-	return
 }
 
 // Reset will clear the tree and keep the allocator. Can be used as a fresh store
