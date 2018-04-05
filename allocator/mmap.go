@@ -27,6 +27,7 @@ type MMap struct {
 
 	f  *os.File
 	mm mmap.MMap
+	fl freelist
 
 	tail int64
 	cap  int64
@@ -126,8 +127,12 @@ func (m *MMap) Get(offset, sz int64) []byte {
 
 // Allocate will allocate bytes
 func (m *MMap) Allocate(sz int64) (s Section, grew bool) {
-	s.Offset = m.tail
 	s.Size = sz
+	if s.Offset = m.fl.acquire(sz); s.Offset != -1 {
+		return
+	}
+
+	s.Offset = m.tail
 	m.tail += sz
 	grew = m.Grow(m.tail)
 	return
@@ -135,8 +140,7 @@ func (m *MMap) Allocate(sz int64) (s Section, grew bool) {
 
 // Release will release a section
 func (m *MMap) Release(s Section) {
-	s.destroy()
-	// Right now we just ignore it and let this grow
+	m.fl.release(s)
 	return
 }
 
