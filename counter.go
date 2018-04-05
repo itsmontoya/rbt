@@ -8,7 +8,7 @@ import (
 )
 
 func newCounter(bs []byte) (c counter) {
-	c.v = (*int64)(unsafe.Pointer(&bs))
+	c.v = (*int64)(unsafe.Pointer(&bs[0]))
 	return
 }
 
