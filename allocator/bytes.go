@@ -14,11 +14,21 @@ func NewBytes(sz int64) *Bytes {
 
 // Bytes manages a byteslice backend
 type Bytes struct {
+	fl freelist
+
 	bs   []byte
 	tail int64
 	cap  int64
 
 	onGrow []OnGrowFn
+}
+
+func (b *Bytes) clean(s Section) {
+	bs := b.bs[s.Offset : s.Offset+s.Size]
+
+	for i := range bs {
+		bs[i] = 0
+	}
 }
 
 // Grow will grow the bytes
@@ -59,8 +69,12 @@ func (b *Bytes) Get(offset, sz int64) []byte {
 
 // Allocate will allocate bytes
 func (b *Bytes) Allocate(sz int64) (s Section, grew bool) {
-	s.Offset = b.tail
 	s.Size = sz
+	if s.Offset = b.fl.acquire(sz); s.Offset != -1 {
+		return
+	}
+
+	s.Offset = b.tail
 	b.tail += sz
 	grew = b.Grow(b.tail)
 	return
@@ -68,8 +82,8 @@ func (b *Bytes) Allocate(sz int64) (s Section, grew bool) {
 
 // Release will release a section
 func (b *Bytes) Release(s Section) {
-	s.destroy()
-	// Right now we just ignore it and let this grow
+	b.clean(s)
+	b.fl.release(s)
 	return
 }
 

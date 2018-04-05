@@ -226,6 +226,16 @@ func (t *Tree) setLabel() {
 	t.t.cap = int64(len(t.bs))
 }
 
+// Checkout will increment the counters for all the blobs associated with this particular tree
+// Note: This is to be used on dup'd trees after creation to ensure the allocator doesn't remove the needed data
+func (t *Tree) Checkout() {
+	if t.t.root == -1 {
+		return
+	}
+
+	t.iterate(t.getBlock(t.t.root), t.acquireIterator)
+}
+
 // PrintTrunk will print the trunk
 func (t *Tree) PrintTrunk() {
 	journaler.Debug("Trunk: %#v / %d", t.t, len(t.bs))
@@ -240,6 +250,15 @@ func (t *Tree) setParentChild(b, parent, child *Block) {
 	case childRoot:
 		// No action is taken, tree will handle this at the end of put
 	}
+}
+
+func (t *Tree) acquireBlob(b *Block) {
+	if b.blobOffset == -1 {
+		return
+	}
+
+	c := newCounter(t.a.Get(b.blobOffset, 8))
+	c.Increment()
 }
 
 func (t *Tree) releaseBlob(b *Block) {
@@ -257,7 +276,16 @@ func (t *Tree) releaseBlob(b *Block) {
 	s.Offset = b.blobOffset
 	s.Size = 8 + b.keyLen + b.valLen
 	t.a.Release(s)
-	journaler.Debug("Actually released!")
+}
+
+func (t *Tree) acquireIterator(b *Block) (end bool) {
+	t.acquireBlob(b)
+	return
+}
+
+func (t *Tree) releaseIterator(b *Block) (end bool) {
+	t.releaseBlob(b)
+	return
 }
 
 func (t *Tree) setBlob(b *Block, key, value []byte) (grew bool) {
@@ -596,14 +624,14 @@ func (t *Tree) numBlack(b *Block) (nb int) {
 	return
 }
 
-func (t *Tree) iterate(b *Block, fn ForEachFn) (ended bool) {
+func (t *Tree) iterate(b *Block, fn IterateFn) (ended bool) {
 	if child := b.children[0]; child != -1 {
 		if ended = t.iterate(t.getBlock(child), fn); ended {
 			return
 		}
 	}
 
-	if ended = fn(t.getKey(b), t.getValue(b)); ended {
+	if ended = fn(b); ended {
 		return
 	}
 
@@ -989,7 +1017,9 @@ func (t *Tree) ForEach(fn ForEachFn) (ended bool) {
 	}
 
 	// Call iterate from root
-	return t.iterate(t.getBlock(t.t.root), fn)
+	return t.iterate(t.getBlock(t.t.root), func(b *Block) bool {
+		return fn(t.getKey(b), t.getValue(b))
+	})
 }
 
 // Reset will clear the tree and keep the allocator. Can be used as a fresh store
@@ -1012,6 +1042,10 @@ func (t *Tree) Size() int64 {
 func (t *Tree) Destroy() (err error) {
 	if t.b == nil {
 		return errors.ErrIsClosed
+	}
+
+	if t.t.root != -1 {
+		t.iterate(t.getBlock(t.t.root), t.releaseIterator)
 	}
 
 	err = t.b.Destroy()

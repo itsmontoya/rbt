@@ -208,6 +208,80 @@ func TestRandomPut(t *testing.T) {
 	testPut(t, testUtils.GetRand(10000))
 }
 
+func TestReclaim(t *testing.T) {
+	var (
+		tr  *Tree
+		tr2 *Tree
+		err error
+	)
+
+	tr = New(32)
+	tr.Put([]byte("0"), []byte("0"))
+	tr.Put([]byte("1"), []byte("1"))
+	tr.Put([]byte("2"), []byte("2"))
+	tr.Put([]byte("3"), []byte("3"))
+	tr.Put([]byte("4"), []byte("4"))
+	tr.Put([]byte("5"), []byte("5"))
+	tr.Put([]byte("6"), []byte("6"))
+	tr.Put([]byte("7"), []byte("7"))
+	tr.Put([]byte("8"), []byte("8"))
+	tr.Put([]byte("9"), []byte("9"))
+
+	dupb := tr.b.Dup()
+	if tr2, err = NewRaw(32, dupb, tr.a); err != nil {
+		return
+	}
+
+	// If this is taken out, the get checks below should fail
+	tr2.Checkout()
+
+	if err = tr.Destroy(); err != nil {
+		t.Fatal(err)
+	}
+
+	if val := tr2.Get([]byte("0")); string(val) != "0" {
+		t.Fatalf("invalid value, expected %s and received %s", "0", string(val))
+	}
+
+	if val := tr2.Get([]byte("1")); string(val) != "1" {
+		t.Fatalf("invalid value, expected %s and received %s", "1", string(val))
+	}
+
+	if val := tr2.Get([]byte("2")); string(val) != "2" {
+		t.Fatalf("invalid value, expected %s and received %s", "2", string(val))
+	}
+
+	if val := tr2.Get([]byte("3")); string(val) != "3" {
+		t.Fatalf("invalid value, expected %s and received %s", "3", string(val))
+	}
+
+	if val := tr2.Get([]byte("4")); string(val) != "4" {
+		t.Fatalf("invalid value, expected %s and received %s", "4", string(val))
+	}
+
+	if val := tr2.Get([]byte("5")); string(val) != "5" {
+		t.Fatalf("invalid value, expected %s and received %s", "5", string(val))
+	}
+
+	if val := tr2.Get([]byte("6")); string(val) != "6" {
+		t.Fatalf("invalid value, expected %s and received %s", "6", string(val))
+	}
+
+	if val := tr2.Get([]byte("7")); string(val) != "7" {
+		t.Fatalf("invalid value, expected %s and received %s", "7", string(val))
+	}
+
+	if val := tr2.Get([]byte("8")); string(val) != "8" {
+		t.Fatalf("invalid value, expected %s and received %s", "8", string(val))
+	}
+
+	if val := tr2.Get([]byte("9")); string(val) != "9" {
+		t.Fatalf("invalid value, expected %s and received %s", "9", string(val))
+	}
+
+	tr2.Destroy()
+}
+
 func BenchmarkTreeGet(b *testing.B) {
 	benchGet(b, testSortedListStr)
 	b.ReportAllocs()

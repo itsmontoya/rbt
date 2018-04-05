@@ -14,6 +14,9 @@ type trunk struct {
 // ForEachFn is used when calling ForEach from a Tree
 type ForEachFn func(key, val []byte) (end bool)
 
+// IterateFn is used when calling iterate from a Tree
+type IterateFn func(b *Block) (end bool)
+
 // GrowFn is used when calling grow internally
 type GrowFn func(sz int64) (bs []byte)
 
