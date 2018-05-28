@@ -3,7 +3,7 @@ package backend
 import (
 	"unsafe"
 
-	"github.com/Path94/atoms"
+	"github.com/PathDNA/atoms"
 	"github.com/itsmontoya/rbt/allocator"
 	"github.com/missionMeteora/toolkit/errors"
 )
