@@ -30,8 +30,18 @@ var (
 
 func TestForEach(t *testing.T) {
 	w := New(1024)
-	w.ForEach(func(k, v []byte) (end bool) {
-		journaler.Debug("uh shit?")
+	w.Put([]byte("1"), []byte("1"))
+	w.Put([]byte("2"), []byte("2"))
+	w.Put([]byte("3"), []byte("3"))
+	w.Put([]byte("4"), []byte("4"))
+	w.Put([]byte("5"), []byte("5"))
+	w.Put([]byte("6"), []byte("6"))
+	w.Put([]byte("7"), []byte("7"))
+	w.Put([]byte("8"), []byte("8"))
+	w.Put([]byte("9"), []byte("9"))
+
+	w.ForEach([]byte("2"), func(k, v []byte) (end bool) {
+		journaler.Debug("uh shit? %s", string(k))
 		return
 	})
 }
@@ -454,7 +464,7 @@ func testPut(t *testing.T, s []int) {
 	}
 
 	var fecnt int
-	tr.ForEach(func(key, val []byte) (end bool) {
+	tr.ForEach([]byte(""), func(key, val []byte) (end bool) {
 		if !bytes.Equal(val, tm[string(key)]) {
 			t.Fatalf("invalid value:\nKey: %s\nExpected: %v\nReturned: %v\n", key, tm[string(key)], val)
 		}
@@ -514,7 +524,7 @@ func benchForEach(b *testing.B, s []testUtils.KV) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		tr.ForEach(func(_, val []byte) (end bool) {
+		tr.ForEach([]byte(""), func(_, val []byte) (end bool) {
 			testVal = val
 			return
 		})
@@ -604,7 +614,7 @@ func benchMMAPForEach(b *testing.B, s []testUtils.KV) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		tr.ForEach(func(_, val []byte) (end bool) {
+		tr.ForEach([]byte(""), func(_, val []byte) (end bool) {
 			testVal = val
 			return
 		})
