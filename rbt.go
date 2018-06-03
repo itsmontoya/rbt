@@ -1010,14 +1010,16 @@ func (t *Tree) Delete(key []byte) {
 }
 
 // ForEach will iterate through each tree item
-func (t *Tree) ForEach(fn ForEachFn) (ended bool) {
+func (t *Tree) ForEach(key []byte, fn ForEachFn) (ended bool) {
 	if t.t.root == -1 {
 		// Root doesn't exist, return early
 		return
 	}
 
+	offset, _ := t.seekBlock(t.t.root, key, false)
+
 	// Call iterate from root
-	return t.iterate(t.getBlock(t.t.root), func(b *Block) bool {
+	return t.iterate(t.getBlock(offset), func(b *Block) bool {
 		return fn(t.getKey(b), t.getValue(b))
 	})
 }
