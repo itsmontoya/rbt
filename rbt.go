@@ -1030,10 +1030,27 @@ func (t *Tree) ForEach(key []byte, fn ForEachFn) (ended bool) {
 	return
 }
 
+func (t *Tree) nextChild(b *Block) (next int64) {
+	var nb *Block
+	for next = b.children[0]; next != -1; next = nb.children[0] {
+		nb = t.getBlock(next)
+	}
+
+	if nb == nil {
+		return
+	}
+
+	next = nb.offset
+	return
+}
+
 func (t *Tree) nextBlock(b *Block) (next int64) {
 	next = -1
 	if b.children[1] > -1 {
-		return b.children[1]
+		child := t.getBlock(b.children[1])
+		if next = t.nextChild(child); next == -1 {
+			return child.offset
+		}
 	}
 
 	if b.ct == childLeft {
@@ -1061,22 +1078,7 @@ func (t *Tree) nextBlock(b *Block) (next int64) {
 
 	uncle := t.getBlock(uncleOffset)
 	next = uncle.children[0]
-
-	var nb *Block
-	for next != -1 {
-		nb = t.getBlock(next)
-		next = nb.children[1]
-	}
-
-	if nb == nil {
-		return
-	}
-
-	next = nb.offset
-	// Our parent is the right child, and so is our current block. This means we will not have an
-	// We have no children on our right side
-
-	return
+	return t.nextChild(uncle)
 }
 
 // Reset will clear the tree and keep the allocator. Can be used as a fresh store
