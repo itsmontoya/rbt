@@ -9,7 +9,6 @@ import (
 
 	"github.com/itsmontoya/rbt"
 	"github.com/missionMeteora/journaler"
-
 	"github.com/pkg/profile"
 )
 
