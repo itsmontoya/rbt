@@ -109,23 +109,6 @@ func (t *Tree) getHead(startOffset int64) (offset int64) {
 	return startOffset
 }
 
-// getTail will get the very last item starting from a given node
-// Note: If called from root, will return the last item in the tree
-func (t *Tree) getTail(startOffset int64) (offset int64) {
-	offset = -1
-
-	if startOffset == -1 {
-		return
-	}
-
-	b := t.getBlock(startOffset)
-	if child := b.children[1]; child != -1 {
-		return t.getTail(child)
-	}
-
-	return startOffset
-}
-
 func (t *Tree) getUncle(startOffset int64) (offset int64) {
 	offset = -1
 	block := t.getBlock(startOffset)
@@ -481,26 +464,6 @@ func (t *Tree) isTriangle(b, parent *Block) (isTriangle bool) {
 	return
 }
 
-func (t *Tree) numBlack(b *Block) (nb int) {
-	if b == nil {
-		return
-	}
-
-	if b.c == colorBlack {
-		nb = 1
-	}
-
-	if childOffset := b.children[0]; childOffset != -1 {
-		nb += t.numBlack(t.getBlock(childOffset))
-	}
-
-	if childOffset := b.children[1]; childOffset != -1 {
-		nb += t.numBlack(t.getBlock(childOffset))
-	}
-
-	return
-}
-
 func (t *Tree) iterate(b *Block, fn Iterator) (ended bool) {
 	if child := b.children[0]; child != -1 {
 		if ended = t.iterate(t.getBlock(child), fn); ended {
@@ -546,7 +509,7 @@ func (t *Tree) Put(key, val []byte) {
 		t.t.root = offset
 	} else {
 		// Find node whose key matches our provided key, if node does not exist - create it.
-		offset, grew = t.seekBlock(t.t.root, key, true)
+		offset, _ = t.seekBlock(t.t.root, key, true)
 		b = t.getBlock(offset)
 	}
 
@@ -582,79 +545,6 @@ func (t *Tree) detachFromParent(b *Block) {
 	} else if b.ct == childRight {
 		parent.children[1] = -1
 	}
-}
-
-// adoptChildren will set in-block children as out-block children
-func (t *Tree) adoptChildren(in, out *Block) {
-	var child *Block
-	//	parent := t.getBlock(in.parent)
-	// Set children of in-block to match the children of the out-block
-	// Note: The in-block will always be a leaf. As a result, we know
-	// that our next block does not have children.
-	if out.children[0] != in.offset {
-		if child = t.getBlock(in.children[0]); child != nil {
-			child.parent = in.parent
-			in.parent = -1
-		}
-
-		in.children[0] = out.children[0]
-		if child = t.getBlock(in.children[0]); child != nil {
-			child.parent = in.offset
-		}
-	}
-
-	if out.children[1] != in.offset {
-		if child = t.getBlock(in.children[1]); child != nil {
-			child.parent = in.parent
-			in.parent = -1
-		}
-
-		in.children[1] = out.children[1]
-		if child = t.getBlock(in.children[1]); child != nil {
-			child.parent = in.offset
-		}
-	}
-
-	// Set children of out to nil values
-	// Note: This technically isn't needed as the out block will be destoyed after this call
-	// We could technically sqeeze out some more performance by avoiding two unnecessary write calls.
-	// Consider removing this when going through the hyper-optimization phase
-	out.children[0] = -1
-	out.children[1] = -1
-}
-
-func (t *Tree) hasBlackChildpair(b *Block) bool {
-	if b == nil {
-		return false
-	}
-
-	var c *Block
-	if c = t.getBlock(b.children[0]); c != nil && c.c == colorRed {
-		return false
-	}
-
-	if c = t.getBlock(b.children[1]); c != nil && c.c == colorRed {
-		return false
-	}
-
-	return true
-}
-
-func (t *Tree) hasRedChildpair(b *Block) bool {
-	if b == nil {
-		return false
-	}
-
-	var c *Block
-	if c = t.getBlock(b.children[0]); c != nil && c.c == colorBlack {
-		return false
-	}
-
-	if c = t.getBlock(b.children[1]); c != nil && c.c == colorBlack {
-		return false
-	}
-
-	return true
 }
 
 func (t *Tree) zeroChildrenDelete(b, parent *Block) {
@@ -885,7 +775,6 @@ func (t *Tree) Delete(key []byte) {
 	}
 
 	t.t.cnt--
-	return
 }
 
 // ForEach will iterate through each tree item
@@ -913,7 +802,7 @@ func (t *Tree) Grow(key []byte, sz int64) (bs []byte) {
 		t.t.root = offset
 	} else {
 		// Find node whose key matches our provided key, if node does not exist - create it.
-		offset, grew = t.seekBlock(t.t.root, key, true)
+		offset, _ = t.seekBlock(t.t.root, key, true)
 		b = t.getBlock(offset)
 	}
 
