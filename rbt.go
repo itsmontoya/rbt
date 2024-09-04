@@ -25,13 +25,11 @@ const (
 	childRight
 )
 
-// Note: These have to be variables in order to be referenced
-var (
-	trunkSizePtr = unsafe.Sizeof(trunk{})
-	blockSizePtr = unsafe.Sizeof(Block{})
-
-	trunkSize = *(*int64)(unsafe.Pointer(&trunkSizePtr))
-	blockSize = *(*int64)(unsafe.Pointer(&blockSizePtr))
+const (
+	// TrunkSize is the size (in bytes) of the trunks
+	TrunkSize = int64(unsafe.Sizeof(trunk{}))
+	// BlockSize is the size (in bytes) of the Blocks
+	BlockSize = int64(unsafe.Sizeof(Block{}))
 )
 
 // New will return a new Tree
@@ -62,8 +60,8 @@ func NewRaw(sz int64, b backend.Backend) (tp *Tree, err error) {
 	var t Tree
 	t.b = b
 
-	if sz < trunkSize {
-		sz = trunkSize
+	if sz < TrunkSize {
+		sz = TrunkSize
 	}
 
 	if t.bs = t.b.Grow(sz); int64(len(t.bs)) < sz {
@@ -76,7 +74,7 @@ func NewRaw(sz int64, b backend.Backend) (tp *Tree, err error) {
 	if t.t.tail == 0 {
 		// trunk has not been set, set inital values
 		t.t.root = -1
-		t.t.tail = trunkSize
+		t.t.tail = TrunkSize
 		t.t.cap = sz
 	}
 
@@ -92,6 +90,176 @@ type Tree struct {
 	b backend.Backend
 }
 
+// Get will retrieve an item from a tree
+func (t *Tree) Get(key []byte) (val []byte) {
+	if offset, _ := t.seekBlock(t.t.root, key, false); offset != -1 {
+		// Node was found, set value as the node's value
+		val = t.getValue(t.getBlock(offset))
+	}
+
+	return
+}
+
+// Put will insert an item into the tree
+func (t *Tree) Put(key, val []byte) {
+	var (
+		b      *Block
+		grew   bool
+		offset int64
+	)
+
+	if t.t.root == -1 {
+		// Root doesn't exist, we can create one
+		b, offset, _ = t.newBlock(key)
+		t.t.root = offset
+	} else {
+		// Find node whose key matches our provided key, if node does not exist - create it.
+		offset, _ = t.seekBlock(t.t.root, key, true)
+		b = t.getBlock(offset)
+	}
+
+	if grew = t.setBlob(b, key, val); grew {
+		b = t.getBlock(offset)
+	}
+
+	// Balance tree after insert
+	// TODO: This can be moved into the node-creation portion
+	t.balance(b)
+
+	root := t.getBlock(t.t.root)
+	if root.ct != childRoot {
+		// Root has changed, update root reference to the new root
+		t.t.root = root.parent
+	}
+
+	t.t.cnt++
+}
+
+// Delete will remove an item from the tree
+func (t *Tree) Delete(key []byte) {
+	var (
+		b      *Block
+		next   *Block
+		offset int64
+	)
+
+	if offset, _ = t.seekBlock(t.t.root, key, false); offset == -1 {
+		return
+	}
+
+	b = t.getBlock(offset)
+	parent := t.getBlock(b.parent)
+	hasLeft := b.children[0] != -1
+	hasRight := b.children[1] != -1
+
+	// BST Delete switch
+	switch {
+	case hasLeft && hasRight:
+		next = t.twoChildDelete(b, parent)
+
+	case !hasLeft && !hasRight:
+		t.zeroChildrenDelete(b, parent)
+		// We are just using this as a placeholder for next
+		next = b
+	default:
+		// Technically this is out of order, but it seems much more clean to check to see
+		// if we have ALL or NONE. If neither cases exist, we know we have one child
+		next = t.oneChildDelete(b, parent)
+
+	}
+
+	// Balancing cases
+	if b.c == colorRed || next.c == colorRed {
+		// Simple Case: If either u or v is red
+		// Note: Because we are not disrupting the black-level, no rotation is needed
+		next.c = colorBlack
+	} else {
+		next.c = colorDoubleBlack
+	}
+
+	t.deleteBalance(next, parent)
+
+	root := t.getBlock(t.t.root)
+	if root != nil && root.ct != childRoot {
+		// Root has changed, update root reference to the new root
+		t.t.root = root.parent
+	}
+
+	t.t.cnt--
+}
+
+// ForEach will iterate through each tree item
+func (t *Tree) ForEach(fn ForEachFn) (ended bool) {
+	if t.t.root == -1 {
+		// Root doesn't exist, return early
+		return
+	}
+
+	// Call iterate from root
+	return t.iterate(t.getBlock(t.t.root), fn)
+}
+
+// Grow will grow a blob value to a given size
+func (t *Tree) Grow(key []byte, sz int64) (bs []byte) {
+	var (
+		b      *Block
+		grew   bool
+		offset int64
+	)
+
+	if t.t.root == -1 {
+		// Root doesn't exist, we can create one
+		b, offset, _ = t.newBlock(key)
+		t.t.root = offset
+	} else {
+		// Find node whose key matches our provided key, if node does not exist - create it.
+		offset, _ = t.seekBlock(t.t.root, key, true)
+		b = t.getBlock(offset)
+	}
+
+	if grew = t.growBlob(b, key, sz); grew {
+		b = t.getBlock(offset)
+	}
+
+	// Balance tree after insert
+	// TODO: This can be moved into the node-creation portion
+	t.balance(b)
+
+	root := t.getBlock(t.t.root)
+	if root.ct != childRoot {
+		// Root has changed, update root reference to the new root
+		t.t.root = root.parent
+	}
+
+	bs = t.getValue(b)
+	return
+}
+
+// Reset will clear the tree and keep the backend. Can be used as a fresh store
+func (t *Tree) Reset() {
+	t.t.tail = TrunkSize
+	t.t.root = -1
+}
+
+// Len will return the length of the data-store
+func (t *Tree) Len() (n int) {
+	return int(t.t.cnt)
+}
+
+// Size will return the number of bytes currently being utilized (not total allocated bytes)
+func (t *Tree) Size() int64 {
+	return t.t.tail
+}
+
+// Close will close a tree
+func (t *Tree) Close() (err error) {
+	if t.b == nil {
+		return
+	}
+
+	return t.b.Close()
+}
+
 // getHead will get the very first item starting from a given node
 // Note: If called from root, will return the first item in the tree
 func (t *Tree) getHead(startOffset int64) (offset int64) {
@@ -104,23 +272,6 @@ func (t *Tree) getHead(startOffset int64) (offset int64) {
 	b := t.getBlock(startOffset)
 	if child := b.children[0]; child != -1 {
 		return t.getHead(child)
-	}
-
-	return startOffset
-}
-
-// getTail will get the very last item starting from a given node
-// Note: If called from root, will return the last item in the tree
-func (t *Tree) getTail(startOffset int64) (offset int64) {
-	offset = -1
-
-	if startOffset == -1 {
-		return
-	}
-
-	b := t.getBlock(startOffset)
-	if child := b.children[1]; child != -1 {
-		return t.getTail(child)
 	}
 
 	return startOffset
@@ -186,7 +337,7 @@ func (t *Tree) setParentChild(b, parent, child *Block) {
 func (t *Tree) setBlob(b *Block, key, value []byte) (grew bool) {
 	valLen := int64(len(value))
 	if valLen == b.valLen {
-		blobIndex := b.offset + blockSize
+		blobIndex := b.offset + BlockSize
 		valueIndex := blobIndex + b.keyLen
 		copy(t.bs[valueIndex:], value)
 		return
@@ -242,9 +393,9 @@ func (t *Tree) growBlob(b *Block, key []byte, sz int64) (grew bool) {
 
 func (t *Tree) newBlock(key []byte) (b *Block, offset int64, grew bool) {
 	offset = t.t.tail
-	grew = t.grow(offset + blockSize)
+	grew = t.grow(offset + BlockSize)
 	b = t.getBlock(offset)
-	t.t.tail += blockSize
+	t.t.tail += BlockSize
 
 	// All new blocks start as red
 	b.c = colorRed
@@ -258,8 +409,6 @@ func (t *Tree) newBlock(key []byte) (b *Block, offset int64, grew bool) {
 	// Set key length
 	b.keyLen = int64(len(key))
 	b.valLen = 0
-	// Debug
-	b.derp = 67
 	return
 }
 
@@ -496,26 +645,6 @@ func (t *Tree) isTriangle(b, parent *Block) (isTriangle bool) {
 	return
 }
 
-func (t *Tree) numBlack(b *Block) (nb int) {
-	if b == nil {
-		return
-	}
-
-	if b.c == colorBlack {
-		nb = 1
-	}
-
-	if childOffset := b.children[0]; childOffset != -1 {
-		nb += t.numBlack(t.getBlock(childOffset))
-	}
-
-	if childOffset := b.children[1]; childOffset != -1 {
-		nb += t.numBlack(t.getBlock(childOffset))
-	}
-
-	return
-}
-
 func (t *Tree) iterate(b *Block, fn ForEachFn) (ended bool) {
 	if child := b.children[0]; child != -1 {
 		if ended = t.iterate(t.getBlock(child), fn); ended {
@@ -537,51 +666,6 @@ func (t *Tree) iterate(b *Block, fn ForEachFn) (ended bool) {
 	return
 }
 
-// Get will retrieve an item from a tree
-func (t *Tree) Get(key []byte) (val []byte) {
-	if offset, _ := t.seekBlock(t.t.root, key, false); offset != -1 {
-		// Node was found, set value as the node's value
-		val = t.getValue(t.getBlock(offset))
-	}
-
-	return
-}
-
-// Put will insert an item into the tree
-func (t *Tree) Put(key, val []byte) {
-	var (
-		b      *Block
-		grew   bool
-		offset int64
-	)
-
-	if t.t.root == -1 {
-		// Root doesn't exist, we can create one
-		b, offset, _ = t.newBlock(key)
-		t.t.root = offset
-	} else {
-		// Find node whose key matches our provided key, if node does not exist - create it.
-		offset, grew = t.seekBlock(t.t.root, key, true)
-		b = t.getBlock(offset)
-	}
-
-	if grew = t.setBlob(b, key, val); grew {
-		b = t.getBlock(offset)
-	}
-
-	// Balance tree after insert
-	// TODO: This can be moved into the node-creation portion
-	t.balance(b)
-
-	root := t.getBlock(t.t.root)
-	if root.ct != childRoot {
-		// Root has changed, update root reference to the new root
-		t.t.root = root.parent
-	}
-
-	t.t.cnt++
-}
-
 // detachFromParent will detach a block from it's parent reference
 // Note: This is never called on root node, parent will always exist
 func (t *Tree) detachFromParent(b *Block) {
@@ -597,79 +681,6 @@ func (t *Tree) detachFromParent(b *Block) {
 	} else if b.ct == childRight {
 		parent.children[1] = -1
 	}
-}
-
-// adoptChildren will set in-block children as out-block children
-func (t *Tree) adoptChildren(in, out *Block) {
-	var child *Block
-	//	parent := t.getBlock(in.parent)
-	// Set children of in-block to match the children of the out-block
-	// Note: The in-block will always be a leaf. As a result, we know
-	// that our next block does not have children.
-	if out.children[0] != in.offset {
-		if child = t.getBlock(in.children[0]); child != nil {
-			child.parent = in.parent
-			in.parent = -1
-		}
-
-		in.children[0] = out.children[0]
-		if child = t.getBlock(in.children[0]); child != nil {
-			child.parent = in.offset
-		}
-	}
-
-	if out.children[1] != in.offset {
-		if child = t.getBlock(in.children[1]); child != nil {
-			child.parent = in.parent
-			in.parent = -1
-		}
-
-		in.children[1] = out.children[1]
-		if child = t.getBlock(in.children[1]); child != nil {
-			child.parent = in.offset
-		}
-	}
-
-	// Set children of out to nil values
-	// Note: This technically isn't needed as the out block will be destoyed after this call
-	// We could technically sqeeze out some more performance by avoiding two unnecessary write calls.
-	// Consider removing this when going through the hyper-optimization phase
-	out.children[0] = -1
-	out.children[1] = -1
-}
-
-func (t *Tree) hasBlackChildpair(b *Block) bool {
-	if b == nil {
-		return false
-	}
-
-	var c *Block
-	if c = t.getBlock(b.children[0]); c != nil && c.c == colorRed {
-		return false
-	}
-
-	if c = t.getBlock(b.children[1]); c != nil && c.c == colorRed {
-		return false
-	}
-
-	return true
-}
-
-func (t *Tree) hasRedChildpair(b *Block) bool {
-	if b == nil {
-		return false
-	}
-
-	var c *Block
-	if c = t.getBlock(b.children[0]); c != nil && c.c == colorBlack {
-		return false
-	}
-
-	if c = t.getBlock(b.children[1]); c != nil && c.c == colorBlack {
-		return false
-	}
-
-	return true
 }
 
 func (t *Tree) zeroChildrenDelete(b, parent *Block) {
@@ -845,137 +856,4 @@ func (t *Tree) deleteBalance(b, parent *Block) {
 	}
 
 	b.c = colorBlack
-}
-
-// Delete will remove an item from the tree
-func (t *Tree) Delete(key []byte) {
-	var (
-		b      *Block
-		next   *Block
-		offset int64
-	)
-
-	if offset, _ = t.seekBlock(t.t.root, key, false); offset == -1 {
-		return
-	}
-
-	b = t.getBlock(offset)
-	parent := t.getBlock(b.parent)
-	hasLeft := b.children[0] != -1
-	hasRight := b.children[1] != -1
-
-	// BST Delete switch
-	switch {
-	case hasLeft && hasRight:
-		next = t.twoChildDelete(b, parent)
-
-	case !hasLeft && !hasRight:
-		t.zeroChildrenDelete(b, parent)
-		// We are just using this as a placeholder for next
-		next = b
-	default:
-		// Technically this is out of order, but it seems much more clean to check to see
-		// if we have ALL or NONE. If neither cases exist, we know we have one child
-		next = t.oneChildDelete(b, parent)
-
-	}
-
-	// Balancing cases
-	if b.c == colorRed || next.c == colorRed {
-		// Simple Case: If either u or v is red
-		// Note: Because we are not disrupting the black-level, no rotation is needed
-		next.c = colorBlack
-	} else {
-		next.c = colorDoubleBlack
-	}
-
-	t.deleteBalance(next, parent)
-
-	root := t.getBlock(t.t.root)
-	if root != nil && root.ct != childRoot {
-		// Root has changed, update root reference to the new root
-		t.t.root = root.parent
-	}
-
-	t.t.cnt--
-	return
-}
-
-// ForEach will iterate through each tree item
-func (t *Tree) ForEach(fn ForEachFn) (ended bool) {
-	if t.t.root == -1 {
-		// Root doesn't exist, return early
-		return
-	}
-
-	// Call iterate from root
-	return t.iterate(t.getBlock(t.t.root), fn)
-}
-
-// Grow will grow a blob value to a given size
-func (t *Tree) Grow(key []byte, sz int64) (bs []byte) {
-	var (
-		b      *Block
-		grew   bool
-		offset int64
-	)
-
-	if t.t.root == -1 {
-		// Root doesn't exist, we can create one
-		b, offset, _ = t.newBlock(key)
-		t.t.root = offset
-	} else {
-		// Find node whose key matches our provided key, if node does not exist - create it.
-		offset, grew = t.seekBlock(t.t.root, key, true)
-		b = t.getBlock(offset)
-	}
-
-	if grew = t.growBlob(b, key, sz); grew {
-		b = t.getBlock(offset)
-	}
-
-	// Balance tree after insert
-	// TODO: This can be moved into the node-creation portion
-	t.balance(b)
-
-	root := t.getBlock(t.t.root)
-	if root.ct != childRoot {
-		// Root has changed, update root reference to the new root
-		t.t.root = root.parent
-	}
-
-	bs = t.getValue(b)
-	return
-}
-
-// Reset will clear the tree and keep the backend. Can be used as a fresh store
-func (t *Tree) Reset() {
-	t.t.tail = trunkSize
-	t.t.root = -1
-}
-
-// Len will return the length of the data-store
-func (t *Tree) Len() (n int) {
-	return int(t.t.cnt)
-}
-
-// Close will close a tree
-func (t *Tree) Close() (err error) {
-	return t.b.Close()
-}
-
-func isBlack(b *Block) bool {
-	if b == nil {
-		return true
-	}
-
-	return b.c == colorBlack
-}
-
-func isRed(b *Block) bool {
-	if b == nil {
-		return false
-	}
-
-	return b.c == colorRed
 }
