@@ -501,7 +501,7 @@ func (t *Tree) numBlack(b *Block) (nb int) {
 	return
 }
 
-func (t *Tree) iterate(b *Block, fn ForEachFn) (ended bool) {
+func (t *Tree) iterate(b *Block, fn Iterator) (ended bool) {
 	if child := b.children[0]; child != -1 {
 		if ended = t.iterate(t.getBlock(child), fn); ended {
 			return
@@ -889,7 +889,7 @@ func (t *Tree) Delete(key []byte) {
 }
 
 // ForEach will iterate through each tree item
-func (t *Tree) ForEach(fn ForEachFn) (ended bool) {
+func (t *Tree) ForEach(fn Iterator) (ended bool) {
 	if t.t.root == -1 {
 		// Root doesn't exist, return early
 		return
