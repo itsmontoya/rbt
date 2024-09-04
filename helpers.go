@@ -11,9 +11,3 @@ type trunk struct {
 
 // ForEachFn is used when calling ForEach from a Tree
 type ForEachFn func(key, val []byte) (end bool)
-
-// GrowFn is used when calling grow internally
-type GrowFn func(sz int64) (bs []byte)
-
-// CloseFn is used when close is called
-type CloseFn func() error
