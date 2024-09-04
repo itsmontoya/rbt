@@ -18,8 +18,6 @@ type Block struct {
 
 	keyLen int64
 	valLen int64
-
-	derp byte
 }
 
 // Blob represents a Key/Value entry

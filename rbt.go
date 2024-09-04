@@ -237,8 +237,6 @@ func (t *Tree) newBlock(key []byte) (b *Block, offset int64, grew bool) {
 	// Set key length
 	b.keyLen = int64(len(key))
 	b.valLen = 0
-	// Debug
-	b.derp = 67
 	return
 }
 
@@ -838,20 +836,4 @@ func (t *Tree) Len() (n int) {
 // Close will close a tree
 func (t *Tree) Close() (err error) {
 	return t.b.Close()
-}
-
-func isBlack(b *Block) bool {
-	if b == nil {
-		return true
-	}
-
-	return b.c == colorBlack
-}
-
-func isRed(b *Block) bool {
-	if b == nil {
-		return false
-	}
-
-	return b.c == colorRed
 }
