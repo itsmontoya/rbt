@@ -454,7 +454,3 @@ func benchMMAPForEach(b *testing.B, s []testUtils.KV) {
 		})
 	}
 }
-
-func byteLess(a, b interface{}) int {
-	return bytes.Compare(a.([]byte), b.([]byte))
-}

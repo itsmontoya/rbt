@@ -257,8 +257,6 @@ func (t *Tree) newBlock(key []byte) (b *Block, offset int64, grew bool) {
 	// Set key length
 	b.keyLen = int64(len(key))
 	b.valLen = 0
-	// Debug
-	b.derp = 67
 	return
 }
 
@@ -560,7 +558,7 @@ func (t *Tree) Put(key, val []byte) {
 		t.t.root = offset
 	} else {
 		// Find node whose key matches our provided key, if node does not exist - create it.
-		offset, grew = t.seekBlock(t.t.root, key, true)
+		offset, _ = t.seekBlock(t.t.root, key, true)
 		b = t.getBlock(offset)
 	}
 
@@ -897,7 +895,6 @@ func (t *Tree) Delete(key []byte) {
 	}
 
 	t.t.cnt--
-	return
 }
 
 // ForEach will iterate through each tree item
