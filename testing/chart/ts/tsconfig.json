@@ -1,9 +1,0 @@
-{
-  "compilerOptions": {
-    "target": "es6",
-    "module": "amd",
-    "outFile": "../js/chart.js",
-    "moduleResolution": "classic",
-    "strict": true
-  }
-}

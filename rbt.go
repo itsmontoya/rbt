@@ -2,16 +2,16 @@ package rbt
 
 import (
 	"bytes"
+	"errors"
 	"unsafe"
 
 	"github.com/itsmontoya/rbt/allocator"
 	"github.com/itsmontoya/rbt/backend"
-	"github.com/missionMeteora/toolkit/errors"
 )
 
-const (
+var (
 	// ErrCannotAllocate is returned when Tree cannot allocate the bytes it needs
-	ErrCannotAllocate = errors.Error("cannot allocate needed bytes")
+	ErrCannotAllocate = errors.New("cannot allocate needed bytes")
 )
 
 const (

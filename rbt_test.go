@@ -10,9 +10,6 @@ import (
 	"github.com/itsmontoya/rbt/testUtils"
 
 	"github.com/missionMeteora/journaler"
-
-	"github.com/OneOfOne/skiplist"
-	cznic "github.com/cznic/b"
 )
 
 var (
@@ -24,8 +21,7 @@ var (
 	testReverseListStr = testUtils.GetStrSlice(testReverseList)
 	testRandomListStr  = testUtils.GetStrSlice(testRandomList)
 
-	testVal      []byte
-	testCznicVal interface{}
+	testVal []byte
 )
 
 func TestRootDelete(t *testing.T) {
@@ -252,7 +248,6 @@ func BenchmarkTreeForEach(b *testing.B) {
 	b.ReportAllocs()
 }
 
-/*
 func BenchmarkTreeMMapGet(b *testing.B) {
 	benchMMAPGet(b, testSortedListStr)
 	b.ReportAllocs()
@@ -282,7 +277,7 @@ func BenchmarkTreeMMapForEach(b *testing.B) {
 	benchMMAPForEach(b, testSortedListStr)
 	b.ReportAllocs()
 }
-*/
+
 func BenchmarkMapGet(b *testing.B) {
 	benchMapGet(b, testSortedListStr)
 	b.ReportAllocs()
@@ -310,65 +305,6 @@ func BenchmarkMapRandomPut(b *testing.B) {
 
 func BenchmarkMapForEach(b *testing.B) {
 	benchMapForEach(b, testSortedListStr)
-	b.ReportAllocs()
-}
-func BenchmarkSkiplistGet(b *testing.B) {
-	benchSkiplistGet(b, testSortedListStr)
-	b.ReportAllocs()
-}
-
-func BenchmarkSkiplistSortedGetPut(b *testing.B) {
-	benchSkiplistGetPut(b, testSortedListStr)
-	b.ReportAllocs()
-}
-
-func BenchmarkSkiplistSortedPut(b *testing.B) {
-	benchSkiplistPut(b, testSortedListStr)
-	b.ReportAllocs()
-}
-
-func BenchmarkSkiplistReversePut(b *testing.B) {
-	benchSkiplistPut(b, testReverseListStr)
-	b.ReportAllocs()
-}
-
-func BenchmarkSkiplistRandomPut(b *testing.B) {
-	benchSkiplistPut(b, testRandomListStr)
-	b.ReportAllocs()
-}
-
-func BenchmarkSkiplistForEach(b *testing.B) {
-	benchSkiplistForEach(b, testSortedListStr)
-	b.ReportAllocs()
-}
-
-func BenchmarkCznicGet(b *testing.B) {
-	benchCznicGet(b, testSortedListStr)
-	b.ReportAllocs()
-}
-
-func BenchmarkCznicSortedGetPut(b *testing.B) {
-	benchCznicGetPut(b, testSortedListStr)
-	b.ReportAllocs()
-}
-
-func BenchmarkCznicSortedPut(b *testing.B) {
-	benchCznicPut(b, testSortedListStr)
-	b.ReportAllocs()
-}
-
-func BenchmarkCznicReversePut(b *testing.B) {
-	benchCznicPut(b, testReverseListStr)
-	b.ReportAllocs()
-}
-
-func BenchmarkCznicRandomPut(b *testing.B) {
-	benchCznicPut(b, testRandomListStr)
-	b.ReportAllocs()
-}
-
-func BenchmarkCznicForEach(b *testing.B) {
-	benchCznicForEach(b, testSortedListStr)
 	b.ReportAllocs()
 }
 
@@ -596,137 +532,6 @@ func benchMapForEach(b *testing.B, s []testUtils.KV) {
 	for i := 0; i < b.N; i++ {
 		for _, val := range m {
 			testVal = val
-		}
-	}
-}
-
-func benchSkiplistGet(b *testing.B, s []testUtils.KV) {
-	sl := skiplist.New(32)
-	for _, kv := range s {
-		sl.Set(kv.Key, kv.Val)
-	}
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		for _, kv := range s {
-			testVal = sl.Get(kv.Key).([]byte)
-		}
-	}
-}
-
-func benchSkiplistPut(b *testing.B, s []testUtils.KV) {
-	b.ResetTimer()
-	sl := skiplist.New(32)
-	for i := 0; i < b.N; i++ {
-		for _, kv := range s {
-			sl.Set(kv.Key, kv.Val)
-		}
-	}
-}
-
-func benchSkiplistGetPut(b *testing.B, s []testUtils.KV) {
-	b.ResetTimer()
-	sl := skiplist.New(32)
-
-	for i := 0; i < b.N; i++ {
-		for _, kv := range s {
-			sl.Set(kv.Key, kv.Val)
-			testVal = sl.Get(kv.Key).([]byte)
-		}
-	}
-}
-
-func benchSkiplistForEach(b *testing.B, s []testUtils.KV) {
-	sl := skiplist.New(32)
-	for _, kv := range s {
-		sl.Set(kv.Key, kv.Val)
-	}
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		sl.ForEach(func(_ string, val interface{}) bool {
-			testVal = val.([]byte)
-			return false
-		})
-	}
-}
-
-func benchCznicGet(b *testing.B, s []testUtils.KV) {
-	tr := cznic.TreeNew(byteLess)
-	for _, kv := range s {
-		tr.Put(kv.Val, func(_ interface{}, exists bool) (interface{}, bool) {
-			return kv.Val, true
-		})
-	}
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		for _, kv := range s {
-			testCznicVal, _ = tr.Get(kv.Val)
-		}
-	}
-}
-
-func byteLess(a, b interface{}) int {
-	return bytes.Compare(a.([]byte), b.([]byte))
-}
-
-func benchCznicPut(b *testing.B, s []testUtils.KV) {
-	tr := cznic.TreeNew(byteLess)
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		for _, kv := range s {
-			tr.Put(kv.Val, func(_ interface{}, exists bool) (interface{}, bool) {
-				return kv.Val, true
-			})
-		}
-	}
-}
-
-func benchCznicGetPut(b *testing.B, s []testUtils.KV) {
-	tr := cznic.TreeNew(byteLess)
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		for _, kv := range s {
-			tr.Put(kv.Val, func(_ interface{}, exists bool) (interface{}, bool) {
-				return kv.Val, true
-			})
-			testCznicVal, _ = tr.Get(kv.Val)
-		}
-	}
-}
-
-func benchCznicForEach(b *testing.B, s []testUtils.KV) {
-	tr := cznic.TreeNew(byteLess)
-
-	for _, kv := range s {
-		tr.Put(kv.Val, func(_ interface{}, exists bool) (interface{}, bool) {
-			return kv.Val, true
-		})
-	}
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		e, ok := tr.Seek([]byte(""))
-		if !ok {
-			b.Fatal("error calling iterator")
-		}
-
-		var (
-			v   interface{}
-			err error
-			cnt int
-		)
-
-		for _, v, err = e.Next(); err == nil; _, v, err = e.Next() {
-			testCznicVal = v
-			cnt++
-		}
-
-		if cnt != len(s) {
-			b.Fatalf("invalid count, expected %v and received %v (%v)", len(s), cnt, err)
 		}
 	}
 }

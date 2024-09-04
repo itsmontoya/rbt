@@ -17,10 +17,3 @@ type GrowFn func(sz int64) (bs []byte)
 
 // CloseFn is used when close is called
 type CloseFn func() error
-
-func getSize(cnt, keySize, valSize int64) (sz int64) {
-	sz = keySize + valSize + blockSize
-	sz *= cnt
-	sz += trunkSize
-	return
-}
