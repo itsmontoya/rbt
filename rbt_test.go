@@ -24,16 +24,8 @@ var (
 	testVal []byte
 )
 
-func TestForEach(t *testing.T) {
-	w := New(1024)
-	w.ForEach(func(k, v []byte) (end bool) {
-		journaler.Debug("uh shit?")
-		return
-	})
-}
-
 func TestRootDelete(t *testing.T) {
-	w := New(1024)
+	w := New(64)
 	k := []byte("hello")
 	v := []byte("world")
 	w.Put(k, v)
@@ -47,6 +39,14 @@ func TestRootDelete(t *testing.T) {
 	if val := string(w.Get(k)); len(val) != 0 {
 		t.Fatalf("invalid value, expected \"%s\" and received \"%s\"", "", val)
 	}
+}
+
+func TestForEach(t *testing.T) {
+	w := New(1024)
+	w.ForEach(func(k, v []byte) (end bool) {
+		journaler.Debug("uh shit?")
+		return
+	})
 }
 
 func TestDelete(t *testing.T) {
@@ -278,6 +278,36 @@ func BenchmarkTreeMMapForEach(b *testing.B) {
 	b.ReportAllocs()
 }
 
+func BenchmarkMapGet(b *testing.B) {
+	benchMapGet(b, testSortedListStr)
+	b.ReportAllocs()
+}
+
+func BenchmarkMapSortedGetPut(b *testing.B) {
+	benchMapGetPut(b, testSortedListStr)
+	b.ReportAllocs()
+}
+
+func BenchmarkMapSortedPut(b *testing.B) {
+	benchMapPut(b, testSortedListStr)
+	b.ReportAllocs()
+}
+
+func BenchmarkMapReversePut(b *testing.B) {
+	benchMapPut(b, testReverseListStr)
+	b.ReportAllocs()
+}
+
+func BenchmarkMapRandomPut(b *testing.B) {
+	benchMapPut(b, testRandomListStr)
+	b.ReportAllocs()
+}
+
+func BenchmarkMapForEach(b *testing.B) {
+	benchMapForEach(b, testSortedListStr)
+	b.ReportAllocs()
+}
+
 func testPut(t *testing.T, s []int) {
 	cnt := len(s)
 	tr := New(1024 * 1024)
@@ -452,5 +482,56 @@ func benchMMAPForEach(b *testing.B, s []testUtils.KV) {
 			testVal = val
 			return
 		})
+	}
+}
+
+func benchMapGet(b *testing.B, s []testUtils.KV) {
+	m := make(map[string][]byte)
+	for _, kv := range s {
+		m[kv.Key] = kv.Val
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, kv := range s {
+			testVal = m[kv.Key]
+		}
+	}
+}
+
+func benchMapPut(b *testing.B, s []testUtils.KV) {
+	b.ResetTimer()
+	m := make(map[string][]byte)
+
+	for i := 0; i < b.N; i++ {
+		for _, kv := range s {
+			m[kv.Key] = kv.Val
+		}
+	}
+}
+
+func benchMapGetPut(b *testing.B, s []testUtils.KV) {
+	b.ResetTimer()
+	m := make(map[string][]byte)
+
+	for i := 0; i < b.N; i++ {
+		for _, kv := range s {
+			testVal = m[kv.Key]
+			m[kv.Key] = kv.Val
+		}
+	}
+}
+
+func benchMapForEach(b *testing.B, s []testUtils.KV) {
+	m := make(map[string][]byte)
+	for _, kv := range s {
+		m[kv.Key] = kv.Val
+	}
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for _, val := range m {
+			testVal = val
+		}
 	}
 }

@@ -5,8 +5,8 @@ import (
 	"path"
 
 	"github.com/edsrzf/mmap-go"
+	"github.com/hatchify/errors"
 	"github.com/missionMeteora/journaler"
-	"github.com/missionMeteora/toolkit/errors"
 )
 
 // NewMMap will return a new Mmap
